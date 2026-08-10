@@ -1,0 +1,37 @@
+# Desenvolvimento local. Espelha o que o Container Apps / AKS vai rodar:
+# mesma imagem, mesmas env vars, mesmo health check.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: conformidade/api:local
+    command: ["api"]
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      CONFORMIDADE_ENVIRONMENT: local
+      CONFORMIDADE_LOG_LEVEL: DEBUG
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health/live').read()
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

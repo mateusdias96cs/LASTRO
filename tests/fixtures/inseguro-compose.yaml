@@ -1,0 +1,46 @@
+# Fixture deliberadamente insegura.
+x-comum: &comum
+  restart: unless-stopped
+  logging:
+    driver: json-file
+
+services:
+  api:
+    # Testa também a merge key (<<), que o parser precisa resolver.
+    <<: *comum
+    image: minhaapp:latest
+    privileged: true
+    network_mode: host
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc:/host-etc:ro
+      - dados:/var/lib/dados
+    environment:
+      API_TOKEN: ghp_abcdefghijklmnopqrstuvwxyz0123456789
+      DB_PASSWORD_FILE: /run/secrets/db
+      APP_ENV: production
+    ports:
+      - "5432:5432"
+      - "127.0.0.1:8080:8080"
+
+  banco:
+    image: postgres@sha256:aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999
+    user: "0"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pid: host
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+volumes:
+  dados:

@@ -1,0 +1,172 @@
+# Portão de qualidade — Azure DevOps
+#
+# Roda o mesmo `scripts/portao.py` que roda na máquina de quem desenvolve.
+# "Passou local" e "passou no CI" precisam significar a mesma coisa; pipeline
+# que executa uma sequência própria de comandos diverge do local em silêncio.
+#
+# As etapas são separadas por legibilidade na interface do Azure DevOps — quem
+# olha o build vê qual delas falhou sem abrir o log. O portão completo roda no
+# fim como rede de segurança.
+#
+# O corpus (`corpus/chunks.jsonl`) e o índice denso (`corpus/index/`) são
+# versionados, então o pipeline não baixa modelo nem reindexa: a avaliação de
+# recuperação roda em segundos, sem rede e sem limite de taxa de terceiro.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    exclude: [README.md, docs/*]
+
+pr:
+  branches:
+    include: [main]
+
+variables:
+  - name: PYTHON_VERSION
+    value: "3.12"
+  - name: UV_CACHE_DIR
+    value: $(Pipeline.Workspace)/.uv-cache
+  - name: IMAGE_NAME
+    value: conformidade/api
+
+stages:
+  - stage: qualidade
+    displayName: Portão de qualidade
+    jobs:
+      - job: verificar
+        displayName: Lint, testes e avaliação
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            displayName: Python $(PYTHON_VERSION)
+            inputs:
+              versionSpec: $(PYTHON_VERSION)
+
+          - task: Cache@2
+            displayName: Cache do uv
+            inputs:
+              key: 'uv | "$(Agent.OS)" | uv.lock'
+              restoreKeys: |
+                uv | "$(Agent.OS)"
+              path: $(UV_CACHE_DIR)
+
+          - script: |
+              set -euo pipefail
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              echo "$HOME/.local/bin" >> $GITHUB_PATH || true
+              export PATH="$HOME/.local/bin:$PATH"
+              uv sync --extra dev --frozen
+            displayName: Instalar dependências
+            env:
+              UV_CACHE_DIR: $(UV_CACHE_DIR)
+
+          # `embed` fica de fora: o índice está versionado, então o modelo só é
+          # necessário quando o corpus muda (ver stage `reindexacao`).
+
+          - script: |
+              export PATH="$HOME/.local/bin:$PATH"
+              uv run ruff check .
+            displayName: Lint
+
+          - script: |
+              export PATH="$HOME/.local/bin:$PATH"
+              uv run ruff format --check .
+            displayName: Formatação
+
+          - script: |
+              export PATH="$HOME/.local/bin:$PATH"
+              uv run pytest -q --junitxml=junit.xml
+            displayName: Testes
+
+          - task: PublishTestResults@2
+            displayName: Publicar resultado dos testes
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFiles: junit.xml
+              testRunTitle: pytest
+
+          # O que de fato reprova: integridade do corpus e ausência de
+          # regressão. As metas do gabarito aparecem no log como pendência.
+          - script: |
+              export PATH="$HOME/.local/bin:$PATH"
+              uv run python scripts/portao.py --sem-lint --sem-testes
+            displayName: Portão — integridade e regressão da recuperação
+
+  - stage: imagem
+    displayName: Imagem
+    dependsOn: qualidade
+    condition: succeeded()
+    jobs:
+      - job: build
+        displayName: Build e verificação da imagem
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - script: |
+              set -euo pipefail
+              docker build -t $(IMAGE_NAME):$(Build.SourceVersion) .
+            displayName: Build
+
+          # Verifica as propriedades que já foram medidas e não podem regredir:
+          # usuário não-root, PID 1 correto e health check respondendo com o
+          # sistema de arquivos raiz somente-leitura.
+          - script: |
+              set -euo pipefail
+              IMG=$(IMAGE_NAME):$(Build.SourceVersion)
+
+              UID_EXEC=$(docker run --rm --entrypoint id "$IMG" -u)
+              test "$UID_EXEC" = "10001" || { echo "roda como UID $UID_EXEC, esperado 10001"; exit 1; }
+
+              docker run -d --name smoke --read-only --tmpfs /tmp \
+                --cap-drop ALL --security-opt no-new-privileges:true \
+                -p 8000:8000 "$IMG"
+              for _ in $(seq 1 30); do
+                curl -sf localhost:8000/health/live >/dev/null && break
+                sleep 1
+              done
+              curl -sf localhost:8000/health/live
+              curl -sf localhost:8000/api/v1/controls | grep -q CONF-WLD-002
+
+              PID1=$(docker exec smoke cat /proc/1/cmdline | tr '\0' ' ')
+              case "$PID1" in *conformidade-api*) ;; *) echo "PID 1 inesperado: $PID1"; exit 1 ;; esac
+
+              INICIO=$(date +%s)
+              docker stop smoke >/dev/null
+              DECORRIDO=$(( $(date +%s) - INICIO ))
+              test "$DECORRIDO" -lt 5 || { echo "SIGTERM não tratado: ${DECORRIDO}s"; exit 1; }
+            displayName: Verificação de runtime da imagem
+
+  # Só quando o corpus muda: reindexar exige baixar o modelo (~130 MB) e
+  # ~5 min de CPU. Fora disso, o índice versionado já serve o portão.
+  - stage: reindexacao
+    displayName: Reindexação (quando o corpus muda)
+    dependsOn: []
+    condition: |
+      or(
+        eq(variables['Build.Reason'], 'Manual'),
+        contains(variables['Build.SourceVersionMessage'], '[reindex]')
+      )
+    jobs:
+      - job: reindexar
+        displayName: Reingerir e reindexar
+        timeoutInMinutes: 30
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: $(PYTHON_VERSION)
+          - script: |
+              set -euo pipefail
+              curl -LsSf https://astral.sh/uv/install.sh | sh
+              export PATH="$HOME/.local/bin:$PATH"
+              uv sync --extra dev --extra embed --frozen
+              uv run python scripts/ingerir.py --baixar
+              uv run python scripts/indexar.py
+              uv run python scripts/portao.py --sem-lint --sem-testes
+            displayName: Ingerir, indexar e medir
+          - publish: corpus
+            artifact: corpus-reindexado
+            displayName: Publicar corpus e índice

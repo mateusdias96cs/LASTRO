@@ -1,0 +1,38 @@
+# Segredos
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Azure Developer CLI (guarda estado e valores por ambiente)
+.azure/
+
+# Cache bruto da ingestão (~20 MB de HTML/PDF de terceiros).
+# O artefato versionado é corpus/chunks.jsonl, não isto.
+.corpus-cache/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# O índice denso (corpus/index/) É versionado, de propósito: sem ele o portão
+# de qualidade no CI teria de baixar 130 MB de pesos e gastar ~270 s de CPU a
+# cada execução, o que o tornaria lento e sujeito a limite de taxa do HF Hub.
+# A checagem de frescor em scripts/portao.py garante que ele não fique defasado.

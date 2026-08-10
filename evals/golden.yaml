@@ -1,0 +1,285 @@
+# Gabarito de recuperação — Fase 1
+#
+# Granularidade: PÁGINA (os ids batem com corpus/sources.yaml). Deliberado —
+# mudar o tamanho do chunk na Fase 4 não invalida este arquivo. Um trecho conta
+# como acerto se veio da página esperada.
+#
+# Graus:
+#   alta      = tem que vir no top-k. É a fonte normativa do controle.
+#   apoio     = bom ter. Fundamenta o risco, mas não é a resposta principal.
+#   nao_deve  = distrator. Se aparecer no top-k, é falha grave: produz citação
+#               plausível e errada, que é o que engana o revisor humano.
+#
+# Procedência: montado a partir da medição de termos-sonda sobre as 34 páginas
+# baixadas (ver corpus/cobertura.md), com curadoria manual para remover casamento
+# incidental. A Fase 2 refina para o nível de seção, quando houver conteúdo
+# parseado.
+#
+# ---------------------------------------------------------------------------
+# REVISÃO 2 — correções apuradas contra o conteúdo real das páginas
+#
+# A versão 1 foi montada a partir de contagem de termos e julgamento. A revisão
+# conferiu cada página marcada `alta` contra o texto extraído, e seis entradas
+# não sobreviveram:
+#
+#  1. CONF-DKR-006 — `dkr:best-practices` estava como alta e tem ZERO ocorrência
+#     de "apt-get upgrade". A fonte real é o NIST (89 ocorrências de
+#     patch/vulnerab) e, de raspão, a referência do Dockerfile.
+#  2. CONF-K8S-005 — `k8s:service` estava como alta e não menciona `hostPort`
+#     nenhuma vez. Rebaixada para apoio: ela sustenta a REMEDIAÇÃO
+#     ("exponha via Service"), não o achado.
+#  3. CONF-SEC-001 — `dkr:build-secrets` estava como alta, mas é página de
+#     segredo de BUILD (14 menções) e não de runtime (2). Virou distrator, o que
+#     torna a nota do par confundível internamente coerente. A fonte Docker
+#     correta para segredo em runtime é `dkr:compose-services`.
+#  4. CONF-WLD-002 — NIST estava como apoio e tem ZERO menção a socket do Docker.
+#  5. CONF-IMG-003 — NIST estava como apoio com evidência fraca (4 ocorrências).
+#  6. NIST adicionado como apoio onde a medição mostrou cobertura forte:
+#     WLD-005 (20), WLD-006 (23), WLD-008 (19), DKR-014 (8), DKR-001 (13).
+#
+# O PDF do NIST agora está extraído e no corpus (63 páginas, 163k caracteres).
+# ---------------------------------------------------------------------------
+
+versao: 2
+
+limiares:
+  recall_at_10: 0.90
+  recall_at_5: 0.75
+  mrr: 0.60
+  ndcg_at_10: 0.65
+  # Zero tolerância: distrator no top-5 reprova o build.
+  distratores_no_top_5: 0
+
+casos:
+  # -------------------------------------------------------------- Dockerfile
+  CONF-DKR-001:
+    alta: [dkr:dockerfile-reference, k8s:security-context]
+    apoio: [dkr:rootless, k8s:pod-security-standards, k8s:linux-kernel-security,
+            nist:sp-800-190]
+    nao_deve: [k8s:namespaces, k8s:service]
+
+  CONF-DKR-002:
+    alta: [dkr:dockerfile-reference]
+    apoio: [dkr:compose-services, k8s:probes]
+    nao_deve: [k8s:secrets, dkr:bind-mounts]
+
+  CONF-DKR-003:
+    alta: [dkr:dockerfile-reference, dkr:best-practices]
+    nao_deve: [k8s:volumes, k8s:service]
+
+  CONF-DKR-004:
+    alta: [dkr:dockerfile-reference]
+    apoio: [dkr:best-practices]
+    nao_deve: [k8s:images, dkr:bind-mounts]
+    nota: Cobertura fina. ADD remoto é tratado na referência, sem página dedicada.
+
+  CONF-DKR-005:
+    alta: [dkr:best-practices]
+    apoio: [dkr:dockerfile-reference]
+    nao_deve: [k8s:seccomp]
+    nota: >-
+      k8s:seccomp casou por conter `curl` em exemplos de shell. É distrator
+      clássico de busca lexical — por isso está listado explicitamente.
+
+  CONF-DKR-006:
+    alta: [nist:sp-800-190, dkr:dockerfile-reference]
+    apoio: [dkr:best-practices]
+    nao_deve: [k8s:images]
+    nota: >-
+      Cobertura oficial fraca no Docker: "apt-get upgrade" aparece 1 vez na
+      referência e 0 vezes em best-practices. O NIST é a fonte real do
+      argumento (atualize a imagem, não o container em execução).
+
+  CONF-DKR-007:
+    alta: [dkr:rootless]
+    apoio: [dkr:best-practices, dkr:engine-security]
+    nao_deve: [k8s:rbac]
+    nota: Cobertura fraca na documentação oficial; o documento canônico do controle carrega o peso.
+
+  CONF-DKR-008:
+    alta: [dkr:dockerfile-reference]
+    apoio: [dkr:best-practices]
+    nao_deve: [k8s:volumes]
+
+  CONF-DKR-009:
+    alta: [dkr:best-practices]
+    nao_deve: [k8s:images, dkr:bind-mounts]
+    nota: Uma página só. Candidato a ampliar o corpus se o recall cair.
+
+  CONF-DKR-010:
+    alta: [dkr:best-practices]
+    apoio: [dkr:dockerfile-reference]
+    nao_deve: [k8s:manage-resources]
+
+  CONF-DKR-011:
+    alta: [dkr:dockerfile-reference, dkr:best-practices]
+    apoio: [dkr:compose-build, dkr:build-secrets]
+    nao_deve: [k8s:volumes]
+
+  CONF-DKR-012:
+    alta: [dkr:dockerfile-reference]
+    apoio: [dkr:cli-container-run, dkr:engine-security]
+    nao_deve: [k8s:service, dkr:network]
+    nota: >-
+      k8s:service e dkr:network falam de porta o tempo todo e afogam a resposta
+      certa numa busca puramente lexical.
+
+  CONF-DKR-013:
+    alta: [dkr:dockerfile-reference]
+    apoio: [dkr:best-practices, dkr:container-run]
+    nao_deve: [k8s:probes]
+
+  CONF-DKR-014:
+    alta: [dkr:build-secrets, dkr:dockerfile-reference]
+    apoio: [k8s:secrets, dkr:best-practices, nist:sp-800-190]
+    nao_deve: [k8s:rbac]
+
+  CONF-DKR-015:
+    alta: [dkr:dockerfile-reference]
+    nao_deve: [k8s:namespaces]
+
+  # ------------------------------------------------- procedência da imagem
+  CONF-IMG-001:
+    alta: [k8s:images]
+    apoio: [dkr:best-practices]
+    nao_deve: [k8s:secrets, dkr:bind-mounts]
+
+  CONF-IMG-002:
+    alta: [k8s:images]
+    apoio: [dkr:best-practices, nist:sp-800-190]
+    nao_deve: [k8s:secrets, dkr:bind-mounts]
+    nota: >-
+      k8s:secrets foi o casamento de maior peso na medição, por conter `:latest`
+      em exemplos. Falso positivo puro — vira distrator explícito.
+
+  CONF-IMG-003:
+    alta: [k8s:images]
+    apoio: [dkr:best-practices, dkr:container-run]
+    nao_deve: [k8s:secrets]
+    nota: NIST removido do apoio na revisão 2 — só 4 ocorrências de digest/assinatura.
+
+  # ------------------------------ postura de runtime (Compose + Kubernetes)
+  CONF-WLD-001:
+    alta: [k8s:pod-security-standards, dkr:container-run]
+    apoio: [k8s:linux-kernel-security, dkr:engine-security, nist:sp-800-190,
+            k8s:security-checklist]
+    nao_deve: [k8s:namespaces, dkr:compose-build]
+
+  CONF-WLD-002:
+    alta: [dkr:engine-security, dkr:rootless]
+    apoio: [k8s:volumes]
+    nao_deve: [k8s:service, dkr:network]
+    nota: >-
+      NIST removido do apoio na revisão 2: zero menção a socket do Docker.
+
+  CONF-WLD-003:
+    alta: [dkr:bind-mounts, k8s:volumes]
+    apoio: [dkr:container-run, nist:sp-800-190]
+    nao_deve: [k8s:secrets]
+
+  CONF-WLD-004:
+    alta: [k8s:pod-security-standards, dkr:compose-services]
+    apoio: [dkr:network, k8s:security-checklist, nist:sp-800-190, k8s:pods]
+    nao_deve: [k8s:service]
+    nota: >-
+      Controle grave com cobertura oficial fina. k8s:service é o distrator mais
+      perigoso: fala de rede o tempo todo sem tratar de hostNetwork.
+
+  CONF-WLD-005:
+    alta: [dkr:seccomp, k8s:security-context, k8s:linux-kernel-security]
+    apoio: [dkr:compose-services, dkr:container-run, dkr:apparmor, k8s:apparmor,
+            nist:sp-800-190]
+    nao_deve: [k8s:rbac]
+
+  CONF-WLD-006:
+    alta: [k8s:security-context, dkr:container-run]
+    apoio: [dkr:compose-services, dkr:cli-container-run, k8s:pod-security-standards,
+            nist:sp-800-190]
+    nao_deve: [k8s:volumes]
+
+  CONF-WLD-007:
+    alta: [k8s:security-context, k8s:pod-security-standards]
+    apoio: [dkr:rootless, k8s:linux-kernel-security, k8s:security-checklist]
+    nao_deve: [k8s:rbac, k8s:service-accounts]
+    nota: >-
+      RBAC e service accounts também falam de identidade e permissão; são o
+      distrator natural de "roda como root".
+
+  CONF-WLD-008:
+    alta: [k8s:security-context, dkr:compose-services]
+    apoio: [dkr:cli-container-run, k8s:pod-security-standards, nist:sp-800-190]
+    nao_deve: [dkr:bind-mounts, k8s:volumes]
+    nota: >-
+      Par confundível clássico: raiz somente-leitura (readOnlyRootFilesystem)
+      versus volume montado somente-leitura. Conceitos distintos.
+
+  CONF-WLD-009:
+    alta: [k8s:manage-resources]
+    apoio: [dkr:compose-deploy, dkr:container-run, k8s:pods]
+    nao_deve: [k8s:rbac, k8s:namespaces]
+
+  CONF-WLD-010:
+    alta: [k8s:probes, dkr:dockerfile-reference]
+    apoio: [dkr:compose-services]
+    nao_deve: [k8s:security-checklist]
+
+  CONF-SEC-001:
+    alta: [k8s:secrets, dkr:compose-services]
+    apoio: [nist:sp-800-190, k8s:volumes]
+    nao_deve: [dkr:build-secrets, dkr:compose-build]
+    nota: >-
+      Par confundível: segredo em runtime (env var) versus segredo de build
+      (RUN --mount=type=secret, coberto por CONF-DKR-014). Medição:
+      `dkr:build-secrets` tem 14 menções a segredo de build contra 2 de
+      runtime — é distrator aqui e fonte normativa lá.
+
+  # ----------------------------------------------------------------- Compose
+  CONF-CMP-001:
+    alta: [dkr:compose-services]
+    apoio: [dkr:cli-container-run, k8s:pod-security-standards]
+    nao_deve: [k8s:rbac]
+    nota: >-
+      Par confundível: no-new-privileges (Docker) versus
+      allowPrivilegeEscalation (Kubernetes). Mesmo conceito, sintaxes distintas.
+
+  CONF-CMP-002:
+    alta: [dkr:compose-services, dkr:network]
+    apoio: [dkr:cli-container-run]
+    nao_deve: [k8s:service, k8s:pod-security-standards]
+
+  # ------------------------------------------------------------- Kubernetes
+  CONF-K8S-001:
+    alta: [k8s:security-context, k8s:pod-security-standards]
+    apoio: [k8s:linux-kernel-security]
+    nao_deve: [dkr:compose-services]
+    nota: Distrator ao contrário do CONF-CMP-001.
+
+  CONF-K8S-002:
+    alta: [k8s:seccomp, k8s:security-context]
+    apoio: [k8s:pod-security-standards, dkr:seccomp, k8s:linux-kernel-security]
+    nao_deve: [k8s:apparmor, dkr:apparmor]
+    nota: "Par confundível: seccomp (syscalls) versus AppArmor (MAC de arquivos)."
+
+  CONF-K8S-003:
+    alta: [k8s:service-accounts, k8s:configure-service-account]
+    apoio: [k8s:security-checklist, k8s:rbac]
+    nao_deve: [k8s:secrets]
+    nota: >-
+      Par confundível: token de service account versus Secret comum. Ambos são
+      Secret por baixo, mas o risco e a mitigação são outros.
+
+  CONF-K8S-004:
+    alta: [k8s:namespaces]
+    apoio: [k8s:multi-tenancy, k8s:pod-security-admission]
+    nao_deve: [k8s:rbac]
+
+  CONF-K8S-005:
+    alta: [k8s:pod-security-standards]
+    apoio: [k8s:service]
+    nao_deve: [dkr:compose-services]
+    nota: >-
+      Par confundível central: hostPort versus hostNetwork (CONF-WLD-004).
+      Nomes quase idênticos, riscos diferentes. `k8s:pod-security-standards` é
+      a ÚNICA página do corpus que menciona hostPort (4 vezes) — lacuna real,
+      candidata a ampliação. `k8s:service` é apoio, não alta: sustenta a
+      remediação ("exponha via Service") sem citar hostPort uma única vez.

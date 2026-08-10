@@ -1,0 +1,88 @@
+# Fixture deliberadamente insegura.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-inseguro
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: inseguro
+    spec:
+      hostNetwork: true
+      hostPID: true
+      serviceAccountName: app-sa
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: host-etc
+          hostPath:
+            path: /etc
+        - name: temp
+          emptyDir: {}
+      initContainers:
+        - name: setup
+          image: busybox:latest
+          command: ["sh", "-c", "echo setup"]
+      containers:
+        - name: app
+          image: minhaapp:1.0
+          securityContext:
+            privileged: true
+            runAsUser: 0
+            capabilities:
+              add: ["SYS_PTRACE"]
+          env:
+            - name: DB_PASSWORD
+              value: "hunter2supersecreto"
+            - name: TOKEN_FROM_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: token
+          ports:
+            - containerPort: 8080
+              hostPort: 8080
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            - name: host-etc
+              mountPath: /host-etc
+              readOnly: true
+---
+# Este pod está bem configurado: serve para provar que as regras não geram
+# ruído em manifesto correto.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-seguro
+  namespace: producao
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: app
+      image: registry.example.com/minhaapp:1.0@sha256:aaaabbbbccccddddeeeeffff00001111222233334444555566667777888899990
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "256Mi"
+      livenessProbe:
+        httpGet:
+          path: /health/live
+          port: 8080
+      readinessProbe:
+        httpGet:
+          path: /health/ready
+          port: 8080

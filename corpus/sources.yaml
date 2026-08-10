@@ -1,0 +1,301 @@
+# Manifesto do corpus — Fase 0
+#
+# Regra de entrada: uma página só entra se puder ser mapeada a pelo menos um
+# controle do catálogo. Com um conjunto de consultas fixo, cada página
+# irrelevante é apenas mais um distrator competindo com a resposta certa.
+#
+# Todas as URLs foram verificadas (HTTP 200) e todas as licenças foram
+# conferidas no arquivo LICENSE do repositório de origem.
+#
+# `controles` vem da medição em corpus/cobertura.md, não de palpite. Ainda
+# assim é candidato: a Fase 2 refina para o nível de seção.
+
+versao: 1
+idioma: en
+
+licencas:
+  Apache-2.0:
+    fonte: https://github.com/docker/docs/blob/main/LICENSE
+    citacao_permitida: true
+    exige_atribuicao: true
+  CC-BY-4.0:
+    fonte: https://github.com/kubernetes/website/blob/main/LICENSE
+    citacao_permitida: true
+    exige_atribuicao: true
+  US-Gov-Public-Domain:
+    observacao: Obra do governo dos EUA, sem restrição de uso
+    citacao_permitida: true
+    exige_atribuicao: false
+
+# Fontes deliberadamente NÃO ingeridas, e por quê.
+excluidas:
+  cis_benchmarks:
+    motivo: >-
+      Redistribuição restrita. Decisão do projeto: usar apenas o NÚMERO DA
+      CLÁUSULA como referência cruzada (campo framework_refs do catálogo),
+      nunca o texto. Nada do CIS entra no corpus.
+  linux_man_pages:
+    motivo: >-
+      Licenciamento heterogêneo por página. O conteúdo necessário (capabilities,
+      seccomp, AppArmor) está coberto pelas páginas de camada 3 do Docker e do
+      Kubernetes, com licença limpa.
+  owasp_cheat_sheets:
+    motivo: >-
+      CC BY-SA 4.0. A cláusula ShareAlike exige atenção se o texto for adaptado.
+      Adiado até haver necessidade — a cobertura atual não depende dele.
+
+# camada 1 = normativo (qual é a configuração correta)
+# camada 2 = fundamentação do risco (por que é perigoso)
+# camada 3 = mecanismo do sistema operacional (por que essa capability é perigosa)
+paginas:
+  # ---------------------------------------------------------------- Docker
+  - id: dkr:dockerfile-reference
+    url: https://docs.docker.com/reference/dockerfile/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-DKR-002, CONF-DKR-003, CONF-DKR-004, CONF-DKR-006,
+                CONF-DKR-008, CONF-DKR-011, CONF-DKR-012, CONF-DKR-013,
+                CONF-DKR-014, CONF-DKR-015, CONF-WLD-010]
+
+  - id: dkr:compose-services
+    url: https://docs.docker.com/reference/compose-file/services/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-CMP-001, CONF-CMP-002, CONF-WLD-004, CONF-WLD-005,
+                CONF-WLD-006, CONF-WLD-008, CONF-WLD-010]
+
+  - id: dkr:compose-deploy
+    url: https://docs.docker.com/reference/compose-file/deploy/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-WLD-009]
+
+  - id: dkr:compose-build
+    url: https://docs.docker.com/reference/compose-file/build/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-DKR-011, CONF-DKR-014]
+
+  - id: dkr:container-run
+    url: https://docs.docker.com/engine/containers/run/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-DKR-013, CONF-WLD-001, CONF-WLD-005, CONF-WLD-006,
+                CONF-WLD-009]
+
+  - id: dkr:cli-container-run
+    url: https://docs.docker.com/reference/cli/docker/container/run/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-WLD-006, CONF-WLD-008, CONF-CMP-002]
+
+  - id: dkr:bind-mounts
+    url: https://docs.docker.com/engine/storage/bind-mounts/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-WLD-003]
+
+  - id: dkr:network
+    url: https://docs.docker.com/engine/network/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-WLD-004, CONF-CMP-002]
+
+  - id: dkr:build-secrets
+    url: https://docs.docker.com/build/building/secrets/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 1
+    controles: [CONF-DKR-014, CONF-SEC-001]
+
+  - id: dkr:best-practices
+    url: https://docs.docker.com/build/building/best-practices/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 2
+    controles: [CONF-DKR-003, CONF-DKR-005, CONF-DKR-006, CONF-DKR-009,
+                CONF-DKR-010, CONF-DKR-011, CONF-DKR-013, CONF-IMG-003]
+
+  - id: dkr:engine-security
+    url: https://docs.docker.com/engine/security/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 2
+    controles: [CONF-WLD-001, CONF-WLD-002, CONF-WLD-005]
+
+  - id: dkr:rootless
+    url: https://docs.docker.com/engine/security/rootless/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 2
+    controles: [CONF-DKR-007, CONF-WLD-002, CONF-WLD-007]
+
+  - id: dkr:seccomp
+    url: https://docs.docker.com/engine/security/seccomp/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 3
+    controles: [CONF-WLD-005, CONF-K8S-002]
+
+  - id: dkr:apparmor
+    url: https://docs.docker.com/engine/security/apparmor/
+    fonte: docker
+    licenca: Apache-2.0
+    camada: 3
+    controles: [CONF-WLD-005]
+
+  # ------------------------------------------------------------ Kubernetes
+  - id: k8s:pod-security-standards
+    url: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 2
+    controles: [CONF-K8S-001, CONF-K8S-002, CONF-K8S-005, CONF-WLD-001,
+                CONF-WLD-004, CONF-WLD-005, CONF-WLD-006, CONF-WLD-007,
+                CONF-WLD-008]
+
+  - id: k8s:security-context
+    url: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-K8S-001, CONF-K8S-002, CONF-WLD-005, CONF-WLD-006,
+                CONF-WLD-007, CONF-WLD-008]
+
+  - id: k8s:pod-security-admission
+    url: https://kubernetes.io/docs/concepts/security/pod-security-admission/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 2
+    controles: [CONF-K8S-004, CONF-WLD-001]
+
+  - id: k8s:linux-kernel-security
+    url: https://kubernetes.io/docs/concepts/security/linux-kernel-security-constraints/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 3
+    controles: [CONF-WLD-001, CONF-WLD-005, CONF-WLD-007, CONF-K8S-002]
+
+  - id: k8s:seccomp
+    url: https://kubernetes.io/docs/tutorials/security/seccomp/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 3
+    controles: [CONF-K8S-002]
+
+  - id: k8s:apparmor
+    url: https://kubernetes.io/docs/tutorials/security/apparmor/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 3
+    controles: [CONF-WLD-005]
+
+  - id: k8s:manage-resources
+    url: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-WLD-009]
+
+  - id: k8s:probes
+    url: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-WLD-010]
+
+  - id: k8s:service-accounts
+    url: https://kubernetes.io/docs/concepts/security/service-accounts/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 2
+    controles: [CONF-K8S-003]
+
+  - id: k8s:configure-service-account
+    url: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-K8S-003]
+
+  - id: k8s:volumes
+    url: https://kubernetes.io/docs/concepts/storage/volumes/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-WLD-002, CONF-WLD-003, CONF-SEC-001]
+
+  - id: k8s:service
+    url: https://kubernetes.io/docs/concepts/services-networking/service/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-K8S-005]
+
+  - id: k8s:namespaces
+    url: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-K8S-004]
+
+  - id: k8s:images
+    url: https://kubernetes.io/docs/concepts/containers/images/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-IMG-001, CONF-IMG-002, CONF-IMG-003]
+
+  - id: k8s:secrets
+    url: https://kubernetes.io/docs/concepts/configuration/secret/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-SEC-001]
+
+  - id: k8s:security-checklist
+    url: https://kubernetes.io/docs/concepts/security/security-checklist/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 2
+    controles: [CONF-K8S-003, CONF-WLD-001, CONF-WLD-004, CONF-WLD-007]
+
+  - id: k8s:multi-tenancy
+    url: https://kubernetes.io/docs/concepts/security/multi-tenancy/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 2
+    controles: [CONF-K8S-004]
+
+  - id: k8s:rbac
+    url: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-K8S-003]
+
+  - id: k8s:pods
+    url: https://kubernetes.io/docs/concepts/workloads/pods/
+    fonte: kubernetes
+    licenca: CC-BY-4.0
+    camada: 1
+    controles: [CONF-WLD-009, CONF-WLD-004]
+
+  # ----------------------------------------------------------------- NIST
+  - id: nist:sp-800-190
+    url: https://nvlpubs.nist.gov/nistpubs/specialpublications/NIST.SP.800-190.pdf
+    fonte: nist
+    licenca: US-Gov-Public-Domain
+    camada: 2
+    formato: pdf
+    controles: [CONF-WLD-001, CONF-WLD-002, CONF-WLD-003, CONF-WLD-004,
+                CONF-WLD-005, CONF-WLD-007, CONF-SEC-001, CONF-IMG-002,
+                CONF-IMG-003]
