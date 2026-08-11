@@ -22,19 +22,40 @@ _TOKEN = re.compile(r"[a-z0-9_.\-/]+")
 
 
 def tokenizar(texto: str) -> list[str]:
-    """Preserva `.`, `-`, `_` e `/` no token, e também emite os componentes de
-    um caminho.
+    """Preserva `.`, `-`, `_` e `/` no meio do token, apara nas bordas, e
+    também emite os componentes de um caminho.
 
     Duas necessidades do domínio que se chocam: quebrar em `\\w+` destruiria
     `docker.sock` e `no-new-privileges`, mas manter só o caminho inteiro faria
     a consulta `docker.sock` não casar com `/var/run/docker.sock`. Emitir os
     dois resolve.
+
+    A aparadura das bordas conserta um defeito que a auditoria da camada 2
+    expôs e que era pervasivo: pontuação colada produzia token distinto. Em
+    `runs as root.` o token era `root.`, e uma consulta por `root` não casava —
+    **toda** palavra em fim de frase ficava invisível. O mesmo valia para
+    prefixos: `--no-install-recommends` e, no texto do Kubernetes,
+    `spec.containers[*].ports[*].hostPort`, onde o `]` corta o token e sobra
+    `.hostport`. Era por isso que o único chunk do corpus que documenta
+    `hostPort` aparecia em 533º lugar no BM25.
+
+    Medido contra o gabarito: recall@5 0,752 → 0,766, recall@10 0,901 → 0,936,
+    MRR 0,877 → 0,891, nDCG 0,782 → 0,806, e os controles com trecho normativo
+    entregue à camada 3 subiram de 11 para 13 (de 19 auditáveis).
+
+    Também foi medida a quebra nos pontos, que alcançaria `spec.hostNetwork` e
+    irmãos. Foi **rejeitada**: inflou o documento de 126 para 131 tokens e a
+    normalização de comprimento do BM25 devolveu o ganho — recall@5 voltou a
+    0,752 e um controle a menos recebeu trecho normativo.
     """
     tokens: list[str] = []
     for bruto in _TOKEN.findall(texto.lower()):
-        tokens.append(bruto)
-        if "/" in bruto:
-            tokens.extend(parte for parte in bruto.split("/") if parte)
+        limpo = bruto.strip("._-/")
+        if not limpo:
+            continue
+        tokens.append(limpo)
+        if "/" in limpo:
+            tokens.extend(parte for parte in limpo.split("/") if parte)
     return tokens
 
 
