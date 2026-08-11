@@ -1,0 +1,80 @@
+// Infraestrutura do sistema de conformidade — escopo de assinatura.
+//
+// Cria o resource group e delega o resto para `resources.bicep`. É a convenção
+// do Azure Developer CLI (azd): `azd up` executa este arquivo.
+//
+// Decisão de hospedagem: Container Apps, não AKS. O produto analisa YAML de
+// Kubernetes **estaticamente** — não precisa executar em Kubernetes. Container
+// Apps escala a zero e custa perto de nada em uso de estudo, enquanto dois nós
+// de AKS consumiriam crédito continuamente mesmo parados.
+
+targetScope = 'subscription'
+
+@minLength(1)
+@maxLength(20)
+@description('Nome do ambiente. Compõe o nome dos recursos e o resource group.')
+param environmentName string
+
+@minLength(1)
+@description('Região dos recursos. Use a mesma do seu Azure OpenAI para reduzir latência.')
+param location string
+
+@description('Endpoint do Azure OpenAI já existente (Foundry). Ex.: https://meu-recurso.openai.azure.com/')
+param azureOpenAiEndpoint string = ''
+
+@description('Nome do deployment do modelo no Foundry. Ex.: gpt-4o-mini')
+param azureOpenAiDeployment string = ''
+
+@description('ID completo do recurso Azure OpenAI, para conceder acesso por identidade gerenciada.')
+param azureOpenAiResourceId string = ''
+
+@description('Tag da imagem a implantar. O pipeline passa o SHA do commit.')
+param imageTag string = 'latest'
+
+// Sufixo determinístico: dois deploys do mesmo ambiente reusam os mesmos nomes,
+// e nomes globalmente únicos (ACR, Key Vault) não colidem entre assinaturas.
+var sufixo = uniqueString(subscription().id, environmentName)
+var tags = {
+  'azd-env-name': environmentName
+  aplicacao: 'conformidade'
+  ambiente: environmentName
+}
+
+resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
+  name: 'rg-conformidade-${environmentName}'
+  location: location
+  tags: tags
+}
+
+module recursos 'resources.bicep' = {
+  name: 'recursos'
+  scope: rg
+  params: {
+    location: location
+    environmentName: environmentName
+    sufixo: sufixo
+    tags: tags
+    azureOpenAiEndpoint: azureOpenAiEndpoint
+    azureOpenAiDeployment: azureOpenAiDeployment
+    imageTag: imageTag
+  }
+}
+
+// O Azure OpenAI já existe (criado no Foundry) e costuma viver em outro
+// resource group, então a atribuição de papel precisa ser feita no escopo dele.
+module papelOpenAi 'openai-role.bicep' = if (!empty(azureOpenAiResourceId)) {
+  name: 'papel-openai'
+  scope: resourceGroup(split(azureOpenAiResourceId, '/')[4])
+  params: {
+    contaOpenAi: last(split(azureOpenAiResourceId, '/'))
+    principalId: recursos.outputs.identidadePrincipalId
+  }
+}
+
+output AZURE_LOCATION string = location
+output AZURE_RESOURCE_GROUP string = rg.name
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = recursos.outputs.registryLoginServer
+output AZURE_CONTAINER_REGISTRY_NAME string = recursos.outputs.registryName
+output AZURE_KEY_VAULT_NAME string = recursos.outputs.keyVaultName
+output SERVICE_API_URI string = recursos.outputs.apiUri
+output AZURE_CLIENT_ID string = recursos.outputs.identidadeClientId

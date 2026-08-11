@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # evita ter que reconstruir a imagem na migração.
     port: int = Field(default=8000, validation_alias="PORT")
 
+    # Onde o corpus indexado vive. Padrão relativo funciona no repositório; na
+    # imagem é absoluto, porque o processo não roda a partir da raiz do projeto.
+    corpus_dir: str = "corpus"
+
     # Preenchidos na migração para Azure. Vazios = recursos ainda não conectados.
     azure_client_id: str = ""  # user-assigned managed identity
     key_vault_uri: str = ""

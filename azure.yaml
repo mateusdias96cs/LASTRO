@@ -1,0 +1,25 @@
+# Azure Developer CLI — descreve o que subir e como.
+#
+# `azd up` provisiona a infraestrutura de infra/ e implanta os serviços.
+# A tag `azd-service-name` no Container App é o que liga este arquivo ao
+# recurso criado pelo Bicep.
+name: conformidade
+metadata:
+  template: conformidade@1.0.0
+
+services:
+  api:
+    project: .
+    language: docker
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+
+hooks:
+  # Impede subir com o índice defasado do corpus: o container responderia com
+  # vetores de um conteúdo que não existe mais, sem erro nenhum.
+  predeploy:
+    shell: sh
+    continueOnError: false
+    run: python scripts/portao.py --sem-lint --sem-testes

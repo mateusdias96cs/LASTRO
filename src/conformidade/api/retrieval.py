@@ -25,26 +25,31 @@ from conformidade.agents.retrieval.index.build import (
 )
 from conformidade.agents.retrieval.ingest import carregar_chunks
 from conformidade.agents.retrieval.queries import CONSULTAS
+from conformidade.config import get_settings
 
 router = APIRouter(prefix="/api/v1", tags=["recuperação"])
 
-CAMINHO_CHUNKS = Path("corpus/chunks.jsonl")
-CAMINHO_INDICE = Path("corpus/index")
+def _base_do_corpus() -> Path:
+    return Path(get_settings().corpus_dir)
 
 
 @lru_cache(maxsize=1)
 def _retriever() -> HybridRetriever | None:
-    if not CAMINHO_CHUNKS.exists():
+    base = _base_do_corpus()
+    caminho_chunks = base / "chunks.jsonl"
+    caminho_indice = base / "index"
+
+    if not caminho_chunks.exists():
         return None
-    chunks = carregar_chunks(CAMINHO_CHUNKS)
+    chunks = carregar_chunks(caminho_chunks)
     lexical = LexicalIndex(chunks)
-    meta = ler_meta(CAMINHO_INDICE)
+    meta = ler_meta(caminho_indice)
 
     denso = None
     consultas = None
-    if (CAMINHO_INDICE / "vectors.npy").exists():
-        denso = carregar_indice_denso(chunks, CAMINHO_INDICE)
-        consultas = carregar_consultas(CAMINHO_INDICE)
+    if (caminho_indice / "vectors.npy").exists():
+        denso = carregar_indice_denso(chunks, caminho_indice)
+        consultas = carregar_consultas(caminho_indice)
 
     return HybridRetriever(
         chunks,

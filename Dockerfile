@@ -39,7 +39,8 @@ LABEL org.opencontainers.image.title="conformidade" \
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH" \
-    PORT=8000
+    PORT=8000 \
+    CONFORMIDADE_CORPUS_DIR=/app/corpus
 
 # UID numérico alto e fixo: exigido pelo Pod Security Standard `restricted`
 # do AKS (runAsNonRoot valida o UID, não o nome do usuário).
@@ -49,6 +50,12 @@ RUN groupadd --gid 10001 app && \
 WORKDIR /app
 
 COPY --from=builder --chown=10001:10001 /app/.venv /app/.venv
+# O corpus indexado (3,4 MB) entra na imagem, e não num volume: ele é
+# versionado no git, muda só quando alguém reindexa, e embutir torna a imagem
+# a unidade completa — sobe em qualquer lugar sem depender de storage montado.
+COPY --chown=10001:10001 corpus/chunks.jsonl /app/corpus/chunks.jsonl
+COPY --chown=10001:10001 corpus/index/ /app/corpus/index/
+
 COPY --chown=10001:10001 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
