@@ -40,3 +40,6 @@ Thumbs.db
 # Documento de retomada entre sessões. Fica só na máquina, por decisão do dono
 # do projeto — descreve estado interno, pendências e decisões em andamento.
 contexto.md
+
+# Cache das respostas da camada 3 — regenerável, derivado do conteúdo.
+.cache-analise/

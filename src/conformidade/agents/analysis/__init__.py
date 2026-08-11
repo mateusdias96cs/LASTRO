@@ -1,7 +1,7 @@
 """Agente de análise — camada 3.
 
-Estado: contrato de saída e avaliação prontos. O agente com LLM ainda não foi
-implementado, de propósito — a medição vem antes, como nas camadas anteriores.
+Estado: contrato, avaliação e provedor Azure OpenAI implementados. A avaliação
+veio antes do provedor, de propósito, como nas camadas anteriores.
 """
 
 from conformidade.agents.analysis.contracts import (

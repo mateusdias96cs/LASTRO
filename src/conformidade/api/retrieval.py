@@ -29,6 +29,7 @@ from conformidade.config import get_settings
 
 router = APIRouter(prefix="/api/v1", tags=["recuperação"])
 
+
 def _base_do_corpus() -> Path:
     return Path(get_settings().corpus_dir)
 

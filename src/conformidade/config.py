@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # imagem é absoluto, porque o processo não roda a partir da raiz do projeto.
     corpus_dir: str = "corpus"
 
+    # Azure OpenAI (camada 3). O Bicep injeta os dois no Container App; sem
+    # chave, porque a autenticação é por identidade gerenciada.
+    azure_openai_endpoint: str = Field(default="", validation_alias="AZURE_OPENAI_ENDPOINT")
+    azure_openai_deployment: str = Field(default="", validation_alias="AZURE_OPENAI_DEPLOYMENT")
+    # Cache das respostas da camada 3, com chave derivada do conteúdo.
+    analise_cache_dir: str = ".cache-analise"
+
     # Preenchidos na migração para Azure. Vazios = recursos ainda não conectados.
     azure_client_id: str = ""  # user-assigned managed identity
     key_vault_uri: str = ""
