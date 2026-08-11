@@ -15,6 +15,32 @@ A medição da Fase 2 deu o alvo: fatiar subiu recall@10 de 0,816 para 0,907, ma
 derrubou MRR de 0,933 para 0,863 e levou os distratores de 5 para 8. A hipótese
 que este módulo testa é que o denso devolva a precisão no topo sem perder a
 cobertura.
+
+## Um chunk por página: medido, e é o melhor ajuste
+
+A auditoria da camada 2 mostrou que o agrupamento não *rebaixa* o chunk que
+carrega o texto normativo — quando um vizinho da mesma página ganha a vaga, ele
+**some do resultado**. Quatro controles perdem o trecho assim, e a conclusão
+natural seria afrouxar a regra. Foi medido, e a conclusão natural está errada:
+
+    por página     R@5     R@10    nDCG    controles com trecho normativo
+    1 (atual)      0,766   0,936   0,806   13/19
+    2              0,766   0,843   0,772   12/19
+    3              0,766   0,810   0,755   12/19
+    sem limite     0,687   0,726   0,730   11/19
+
+Com 2 por página o `CONF-DKR-006` entra, mas `CONF-K8S-005` e `CONF-WLD-004`
+saem — chunks repetidos de páginas bem ranqueadas consomem as vagas e empurram
+para fora o portador de outro controle. Trocar o controle **crítico** do
+`hostNetwork` por outro não é ganho.
+
+Também foi medido subir o `k` entregue à camada 3, que é a outra alavanca
+óbvia. De 6 para 10 ganha **um** controle (13 → 14) e leva a exposição a
+distratores de 6 para 17 dos 36 — quase o triplo. Citar fonte vizinha é falha
+real da camada 3, então o custo supera o ganho.
+
+Os dois parâmetros estão no melhor ajuste. Os 6 controles que ainda não recebem
+trecho normativo são problema de **consulta**, não de política de entrega.
 """
 
 from __future__ import annotations
