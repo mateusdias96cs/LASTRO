@@ -1,0 +1,58 @@
+# Atualização automática de dependências.
+#
+# Existe para resolver uma tensão que o próprio sistema aponta: o controle
+# CONF-IMG-003 exige que a imagem seja fixada por digest, e imagem fixada sem
+# mecanismo de atualização vira imagem congelada e vulnerável. O Dependabot abre
+# o PR quando há versão nova, e o portão de qualidade decide se ela entra.
+#
+# O mesmo raciocínio vale para as actions do workflow, que também estão fixadas
+# por SHA de commit — é o `CONF-IMG-003` aplicado à cadeia de suprimentos do CI.
+
+version: 2
+
+updates:
+  # Imagem base do Dockerfile (python:3.12-slim-bookworm, fixada por digest).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build"
+    labels:
+      - dependências
+      - docker
+
+  # Dependências Python. O projeto usa uv com uv.lock versionado.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+    labels:
+      - dependências
+      - python
+    groups:
+      # Agrupa as de desenvolvimento num PR só: elas não afetam o artefato
+      # publicado e revisar cinco PRs de lint por semana cansa e vira ruído.
+      desenvolvimento:
+        patterns:
+          - pytest*
+          - ruff
+          - httpx
+
+  # Actions do workflow, fixadas por SHA. Sem isto, o pin vira congelamento.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependências
+      - ci

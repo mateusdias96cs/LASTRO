@@ -119,8 +119,12 @@ Secret comum), provando que a avaliação discrimina de verdade.
 make portao        # o mesmo comando que o CI executa
 ```
 
-O pipeline em [.pipelines/ci.yaml](.pipelines/ci.yaml) chama exatamente este
-script — "passou local" e "passou no CI" significam a mesma coisa.
+O workflow em [.github/workflows/ci.yml](.github/workflows/ci.yml) chama
+exatamente este script — "passou local" e "passou no CI" significam a mesma
+coisa. As actions estão fixadas por SHA de commit, e não por tag, pelo mesmo
+motivo que o `CONF-IMG-003` exige digest em imagem: tag é ponteiro móvel.
+O [Dependabot](.github/dependabot.yml) mantém os SHAs e a imagem base
+atualizados — sem ele, fixar por digest vira congelar.
 
 **O que bloqueia:**
 

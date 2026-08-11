@@ -36,3 +36,7 @@ Thumbs.db
 # de qualidade no CI teria de baixar 130 MB de pesos e gastar ~270 s de CPU a
 # cada execução, o que o tornaria lento e sujeito a limite de taxa do HF Hub.
 # A checagem de frescor em scripts/portao.py garante que ele não fique defasado.
+
+# Documento de retomada entre sessões. Fica só na máquina, por decisão do dono
+# do projeto — descreve estado interno, pendências e decisões em andamento.
+contexto.md

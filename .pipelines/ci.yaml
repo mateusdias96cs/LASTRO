@@ -1,3 +1,14 @@
+# ============================================================================
+# SUBSTITUÍDO por .github/workflows/ci.yml
+#
+# Mantido como referência para o caso de o projeto migrar para Azure Repos ou
+# Azure Pipelines no futuro — a tradução para GitHub Actions foi 1:1.
+#
+# NÃO EDITE ESTE ARQUIVO. Duas definições de CI que divergem em silêncio é
+# exatamente o problema que este projeto evita em outros lugares. Se o CI
+# precisar mudar, mude o workflow do GitHub Actions.
+# ============================================================================
+
 # Portão de qualidade — Azure DevOps
 #
 # Roda o mesmo `scripts/portao.py` que roda na máquina de quem desenvolve.

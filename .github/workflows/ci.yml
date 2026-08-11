@@ -1,0 +1,185 @@
+# Portão de qualidade.
+#
+# Chama `scripts/portao.py`, o mesmo comando de `make portao`. Workflow que
+# executa uma sequência própria de passos diverge do que roda na máquina de
+# quem desenvolve, e a divergência só aparece quando alguém perde uma tarde
+# investigando por que "passa aqui e falha lá".
+#
+# O corpus (`corpus/chunks.jsonl`) e o índice denso (`corpus/index/`) são
+# versionados de propósito: sem eles, cada execução baixaria 130 MB de pesos e
+# gastaria ~270 s de CPU, sujeita a limite de taxa do Hugging Face. Com eles, a
+# avaliação de recuperação roda em segundos, offline. A checagem de frescor
+# dentro do portão impede que o índice fique defasado do corpus.
+#
+# As actions estão fixadas por SHA de commit, não por tag. Tag é ponteiro móvel
+# e pode ser reapontada por quem publica a action — é exatamente o risco que o
+# controle CONF-IMG-003 descreve para imagens, aplicado ao CI. O Dependabot
+# mantém os SHAs atualizados.
+
+name: Portão de qualidade
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reindexar:
+        description: "Reingerir o corpus e reindexar (lento, baixa o modelo)"
+        type: boolean
+        default: false
+
+# Menor privilégio: o workflow só lê o repositório.
+permissions:
+  contents: read
+
+# PR novo cancela a execução anterior do mesmo PR; em main, nada é cancelado.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  qualidade:
+    name: Lint, testes e avaliação
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Instalar dependências
+        # `--frozen` reprova se o uv.lock estiver dessincronizado do pyproject,
+        # em vez de resolver de novo e mascarar a divergência.
+        # O extra `embed` fica de fora: o índice está versionado, então o modelo
+        # só é necessário no job de reindexação.
+        run: uv sync --extra dev --frozen
+
+      - name: Lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Formatação
+        run: uv run ruff format --check .
+
+      - name: Testes
+        run: uv run pytest -q --junitxml=junit.xml
+
+      - name: Publicar resultado dos testes
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: resultado-dos-testes
+          path: junit.xml
+          retention-days: 14
+
+      # O que de fato reprova: integridade do corpus e ausência de regressão.
+      # As metas do gabarito aparecem no log como pendência, sem bloquear —
+      # portão permanentemente vermelho é portão que a equipe aprende a ignorar.
+      - name: Portão — integridade e regressão da recuperação
+        run: uv run python scripts/portao.py --sem-lint --sem-testes
+
+  imagem:
+    name: Build e verificação de runtime
+    runs-on: ubuntu-latest
+    needs: qualidade
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build
+        run: docker build -t conformidade/api:${{ github.sha }} .
+
+      # Verifica as propriedades que já foram medidas e não podem regredir.
+      # Não é smoke test genérico: cada asserção corresponde a um controle que
+      # o próprio sistema audita nos arquivos dos usuários.
+      - name: Verificação de runtime
+        run: |
+          set -euo pipefail
+          IMG=conformidade/api:${{ github.sha }}
+
+          # CONF-DKR-001 / CONF-WLD-007 — não roda como root
+          UID_EXEC=$(docker run --rm --entrypoint id "$IMG" -u)
+          test "$UID_EXEC" = "10001" \
+            || { echo "::error::roda como UID $UID_EXEC, esperado 10001"; exit 1; }
+
+          # Sobe com as restrições do PodSecurityStandard restricted
+          docker run -d --name smoke \
+            --read-only --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -p 8000:8000 "$IMG"
+
+          for _ in $(seq 1 30); do
+            curl -sf localhost:8000/health/live >/dev/null && break
+            sleep 1
+          done
+          curl -sf localhost:8000/health/live
+          curl -sf localhost:8000/api/v1/controls | grep -q CONF-WLD-002
+
+          # CONF-DKR-013 — forma exec: o processo da aplicação é o PID 1
+          PID1=$(docker exec smoke cat /proc/1/cmdline | tr '\0' ' ')
+          case "$PID1" in
+            *conformidade-api*) ;;
+            *) echo "::error::PID 1 inesperado: $PID1"; exit 1 ;;
+          esac
+
+          # SIGTERM tratado: sem isso o drain do Kubernetes corta conexão em
+          # andamento a cada deploy. 10 s indicaria kill forçado.
+          INICIO=$(date +%s)
+          docker stop smoke >/dev/null
+          DECORRIDO=$(( $(date +%s) - INICIO ))
+          test "$DECORRIDO" -lt 5 \
+            || { echo "::error::SIGTERM não tratado: ${DECORRIDO}s até parar"; exit 1; }
+
+          echo "todas as propriedades de runtime verificadas"
+
+  # Só sob demanda: reindexar baixa ~130 MB de pesos e gasta ~5 min de CPU.
+  # Fora disso, o índice versionado já serve o portão.
+  reindexacao:
+    name: Reingerir e reindexar
+    if: github.event_name == 'workflow_dispatch' && inputs.reindexar
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Instalar dependências com o modelo
+        run: uv sync --extra dev --extra embed --frozen
+
+      - name: Ingerir, indexar e medir
+        run: |
+          set -euo pipefail
+          uv run python scripts/ingerir.py --baixar
+          uv run python scripts/indexar.py
+          uv run python scripts/portao.py --sem-lint --sem-testes
+
+      # Não faz commit: o resultado sai como artefato para revisão humana.
+      # Corpus e índice são conteúdo auditável — entram por PR, não por push
+      # automático de robô.
+      - name: Publicar corpus e índice regerados
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: corpus-reindexado
+          path: corpus/
+          retention-days: 30
