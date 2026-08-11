@@ -37,7 +37,17 @@ API_VERSION = "2024-10-21"
 
 # Muda quando o prompt muda. Faz parte da chave do cache: prompt novo precisa
 # de resposta nova, senão o cache mascara o efeito do ajuste.
-VERSAO_DO_PROMPT = "1"
+VERSAO_DO_PROMPT = "2"
+
+
+def _e_modelo_de_raciocinio(nome_deployment: str) -> bool:
+    """Modelos da família de raciocínio (o1/o3/o4, gpt-5 não-chat) só aceitam
+    o valor padrão de temperature. Detecta pelo nome do deployment, já que a
+    API não expõe essa informação antes da chamada."""
+    nome = nome_deployment.lower()
+    if "chat" in nome:
+        return False
+    return nome.startswith(("o1", "o3", "o4", "gpt-5"))
 
 
 class AnalisadorAzureOpenAI:
@@ -136,14 +146,18 @@ class AnalisadorAzureOpenAI:
         if guardado is not None:
             return guardado
 
+        kwargs = {}
+        if not _e_modelo_de_raciocinio(self._deployment):
+            kwargs["temperature"] = self._temperatura
+
         resposta = self._obter_cliente().chat.completions.parse(
             model=self._deployment,
-            temperature=self._temperatura,
             messages=[
                 {"role": "system", "content": prompt_sistema()},
                 {"role": "user", "content": prompt_usuario(entrada)},
             ],
             response_format=AchadoAnalisado,
+            **kwargs,
         )
 
         mensagem = resposta.choices[0].message
@@ -156,9 +170,38 @@ class AnalisadorAzureOpenAI:
         # O modelo pode devolver outro control_id; a camada 3 não inventa
         # achado, então o valor de entrada prevalece.
         saida = saida.model_copy(update={"control_id": entrada.control_id})
+        saida = _resolver_referencias(entrada, saida)
 
         self._guardar(chave, saida)
         return saida
+
+
+def _resolver_referencias(entrada: EntradaAnalise, saida: AchadoAnalisado) -> AchadoAnalisado:
+    """Traduz o número da referência de volta para o `chunk_id` real.
+
+    A primeira rodada real mostrou o modelo transcrevendo
+    `...58d22670a9b` no lugar de `...58d22670a9` — um caractere a mais num
+    sufixo hexadecimal de 10 dígitos. Pedir para copiar identificador longo e
+    opaco é convidar esse erro; pedir `2` elimina a classe inteira.
+    """
+    trechos = entrada.recuperacao.trechos if entrada.recuperacao else []
+    if not trechos:
+        return saida
+
+    por_numero = {str(i): t.chunk for i, t in enumerate(trechos, start=1)}
+    por_id = {t.chunk.chunk_id: t.chunk for t in trechos}
+
+    resolvidas = []
+    for citacao in saida.citacoes:
+        bruto = citacao.chunk_id.strip().strip("[]")
+        chunk = por_numero.get(bruto) or por_id.get(citacao.chunk_id)
+        if chunk is None:
+            # Referência irreconhecível: mantém como veio, para o verificador
+            # reprovar em vez de a falha sumir numa correção silenciosa.
+            resolvidas.append(citacao)
+            continue
+        resolvidas.append(citacao.model_copy(update={"chunk_id": chunk.chunk_id, "url": chunk.url}))
+    return saida.model_copy(update={"citacoes": resolvidas})
 
 
 # --------------------------------------------------------------------------
@@ -176,8 +219,12 @@ def prompt_sistema() -> str:
         "quem não é especialista, e citar a fonte.\n"
         "2. O DOCUMENTO CANÔNICO é a autoridade sobre o controle. Quando ele "
         "conflitar com um trecho recuperado, siga o documento canônico.\n"
-        "3. Toda citação precisa ser cópia LITERAL de um trecho fornecido, com o "
-        "chunk_id correspondente. Não parafraseie dentro de `trecho_exato`.\n"
+        "3. Toda citação precisa ser cópia LITERAL e CONTÍNUA de um trecho "
+        "fornecido. Em `chunk_id`, coloque APENAS o número da referência entre "
+        "colchetes (ex.: `3`), nunca o identificador longo.\n"
+        "   Em `trecho_exato`: entre 8 e 30 palavras seguidas, copiadas sem "
+        "alterar nada. NUNCA use reticências (… ou ...) nem abrevie. Se o "
+        "trecho for longo, escolha um pedaço menor e copie-o inteiro.\n"
         "4. Só cite trecho que trate DESTE controle. Trecho sobre assunto vizinho "
         "produz afirmação plausível e errada — pior que não citar.\n"
         "5. Se não houver respaldo oficial adequado, deixe `citacoes` vazio. "
@@ -237,13 +284,13 @@ def prompt_usuario(entrada: EntradaAnalise) -> str:
         partes.append("(nenhum — deixe `citacoes` vazio)")
     else:
         partes.append(
-            "Cite pelo chunk_id exatamente como aparece entre colchetes, e copie "
-            "o trecho literalmente."
+            "Para citar, use em `chunk_id` o NÚMERO da referência (ex.: `2`) e "
+            "copie o trecho palavra por palavra."
         )
-        for t in trechos:
+        for i, t in enumerate(trechos, start=1):
             partes += [
                 "",
-                f"[{t.chunk.chunk_id}] fonte={t.chunk.fonte} url={t.chunk.url}",
+                f"[{i}] fonte={t.chunk.fonte} url={t.chunk.url}",
                 t.chunk.texto,
             ]
 

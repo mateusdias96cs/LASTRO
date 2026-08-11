@@ -45,10 +45,18 @@ def _normalizar(texto: str) -> str:
     comparação byte a byte reprovaria citação honesta. Já a remoção de acento
     protege contra diferença de normalização Unicode (NFC × NFD), que é
     invisível na tela e faz `in` falhar sem motivo aparente.
+
+    O espaço antes de pontuação também sai. A extração de HTML deixa artefatos
+    como `in the container's securityContext .` no nosso próprio corpus, e a
+    primeira rodada real reprovou uma citação correta só por isso: o modelo
+    escreveu a forma natural, `securityContext.`. Isso não afrouxa a checagem —
+    uma frase inventada continua não casando; só deixa de punir o modelo por
+    defeito da nossa ingestão.
     """
     texto = unicodedata.normalize("NFKD", texto)
     texto = "".join(c for c in texto if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", texto).strip().lower()
+    texto = re.sub(r"\s+", " ", texto).strip().lower()
+    return re.sub(r"\s+([.,;:!?)\]])", r"\1", texto)
 
 
 # --------------------------------------------------------------- citação
@@ -207,6 +215,23 @@ def responde_em_portugues(saida: AchadoAnalisado) -> list[Falha]:
     if not any(p in texto for p in _PALAVRAS_PT):
         return [Falha("idioma", "explicação não parece estar em português")]
     return []
+
+
+def contem_algum(saida: AchadoAnalisado, alternativas: list[str]) -> list[Falha]:
+    """Pelo menos um dos termos precisa aparecer.
+
+    Existe porque exigir uma palavra específica vira checagem de estilo. Na
+    primeira rodada real o modelo escreveu «mesmo com `:ro`, expõe a API do
+    daemon» — substância exatamente certa — e reprovou por não usar a palavra
+    "somente-leitura". O que se quer medir é se ele tratou do conceito, não
+    qual sinônimo escolheu.
+    """
+    if not alternativas:
+        return []
+    texto = _normalizar(f"{saida.explicacao} {saida.como_corrigir} {saida.justificativa_do_ajuste}")
+    if any(_normalizar(t) in texto for t in alternativas):
+        return []
+    return [Falha("nenhum_termo_equivalente", f"não mencionou nenhum de {alternativas}")]
 
 
 def contem_termos(

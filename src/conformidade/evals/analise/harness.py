@@ -98,6 +98,7 @@ def avaliar_caso(analisador: Analisador, caso: Caso, retriever=None) -> Resultad
     falhas += v.ajuste_justificado(entrada, saida)
     falhas += v.responde_em_portugues(saida)
     falhas += v.contem_termos(saida, e.deve_mencionar, e.nao_deve_mencionar)
+    falhas += v.contem_algum(saida, e.deve_mencionar_algum)
     falhas += v.explicacao_substancial(saida)
 
     if e.citacoes_maximas is not None and len(saida.citacoes) > e.citacoes_maximas:

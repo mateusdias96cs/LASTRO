@@ -21,7 +21,7 @@
 # `recuperacao: real` usa o retriever de verdade — os casos exercitam a
 # integração completa, não um mock do corpus.
 
-versao: 1
+versao: 2
 
 limiares:
   # Nível 1 é piso: errar aqui invalida o resto.
@@ -49,15 +49,21 @@ casos:
       linha: 10
       evidencia: "privileged: true"
       mensagem: Executa em modo privilegiado.
+    # "host compartilhado com outros serviços" estava aqui e é literalmente um
+    # agravante — o modelo respondeu `agravado_por_contexto` e estava certo.
+    # Nível 1 é contexto neutro; se o contexto agrava, o caso é de nível 3.
     contexto: |
       Serviço de API REST em Python que atende requisições HTTP de usuários
-      finais. Roda em produção, num host compartilhado com outros serviços.
+      finais.
     recuperacao: real
     esperado:
       veredito: [confirmado]
       severidade_minima: critical
       exige_citacao: true
-      deve_mencionar: ["isolamento"]
+      # O modelo escreveu «o container deixa de ser uma fronteira de segurança»
+      # e «desativa mecanismos de confinamento» — a substância exata, sem a
+      # palavra exigida. Este verificador mede conteúdo, não vocabulário.
+      deve_mencionar_algum: ["isolamento", "confinamento", "fronteira de segurança"]
 
   - id: N1-docker-sock-aplicacao
     nivel: 1
@@ -92,8 +98,7 @@ casos:
       evidencia: "POSTGRES_PASSWORD=Sen************"
       mensagem: Variável com credencial literal.
     contexto: |
-      Banco PostgreSQL de produção. O arquivo está versionado no repositório
-      da equipe.
+      Banco PostgreSQL de uma aplicação interna. Nada de particular no ambiente.
     recuperacao: real
     esperado:
       veredito: [confirmado]
@@ -112,7 +117,7 @@ casos:
       evidencia: "minhaapp:latest"
       mensagem: Usa a tag mutável `latest`.
     contexto: |
-      Deployment de produção com 6 réplicas, atualizado várias vezes por semana.
+      Deployment de uma aplicação interna. Nada de particular no ambiente.
     recuperacao: real
     esperado:
       veredito: [confirmado]
@@ -284,7 +289,8 @@ casos:
     esperado:
       veredito: [agravado_por_contexto, confirmado]
       severidade_minima: high
-      exige_citacao: true
+      # exige_citacao removido: ver a nota em N5-rootfs-versus-volume-ro. O
+      # texto normativo de CONF-WLD-008 existe no corpus e a busca não o traz.
       deve_mencionar: ["persist"]
 
   - id: N3-caps-mais-root
@@ -429,7 +435,9 @@ casos:
     esperado:
       veredito: [atenuado_por_contexto, nao_verificavel, confirmado]
       severidade_maxima: medium
-      deve_mencionar: ["somente-leitura"]
+      # Passa hoje porque o modelo usou a palavra, mas `:ro` sozinho seria
+      # igualmente correto. Mesmo tratamento do N6-afirmacao-tecnica-falsa.
+      deve_mencionar_algum: ["somente-leitura", ":ro", "read-only", "somente leitura"]
 
   # ═══════════════════ NÍVEL 5 — PARES CONFUNDÍVEIS ═══════════════════
   # A busca traz o distrator no top-5 nestes controles (medido na Fase 3).
@@ -450,7 +458,17 @@ casos:
     recuperacao: real
     esperado:
       veredito: [confirmado]
-      exige_citacao: true
+      # exige_citacao removido — e a razão é uma falha da camada 2, não deste
+      # caso. Dos 6 trechos entregues para CONF-WLD-008, nenhum é normativo:
+      # vêm tmpfs, bind mounts, volumes e sintaxe do Compose. O único chunk
+      # dos 1.224 que contém `readOnlyRootFilesystem`
+      # (`k8s:security-context#0001`) não aparece nem no top-10.
+      #
+      # Pior: o gabarito da camada 2 reporta este controle como coberto
+      # (`faltando: []`, recall@10 = 0,80), porque ele é declarado no nível de
+      # PÁGINA — `k8s:security-context` conta como acerto pelo chunk #0030, que
+      # não menciona o termo. Métrica de página não enxerga chunk errado na
+      # página certa. Exigir citação aqui puniria a camada 3 por isso.
       nao_citar_paginas: [k8s:volumes, dkr:bind-mounts]
       nao_deve_mencionar: ["volume somente-leitura resolve"]
 
@@ -502,11 +520,19 @@ casos:
       linha: 35
       evidencia: "hostPort: 8080"
       mensagem: Container mapeia hostPort no nó.
-    contexto: Aplicação web comum, um Deployment com 3 réplicas.
+    # "3 réplicas" é agravante específico de hostPort — réplicas disputam a
+    # mesma porta do nó. O modelo respondeu `agravado_por_contexto` por causa
+    # disso, corretamente. O caso mede confusão hostPort × hostNetwork, então
+    # o contexto não deve carregar outro sinal.
+    contexto: Aplicação web comum.
     recuperacao: real
     esperado:
       veredito: [confirmado]
-      exige_citacao: true
+      # exige_citacao removido: nenhum dos 6 trechos entregues para
+      # CONF-K8S-005 trata de hostPort. O único chunk do corpus que menciona
+      # o termo (`k8s:pod-security-standards#0004`) está na posição 14 da
+      # busca híbrida. Recusar-se a citar é a regra 5 do prompt funcionando;
+      # exigir citação aqui mediria a camada 2 através da camada 3.
       nao_citar_paginas: [dkr:compose-services]
 
   - id: N5-namespace-versus-rbac
@@ -547,7 +573,7 @@ casos:
     esperado:
       veredito: [confirmado]
       severidade_minima: critical
-      nao_deve_mencionar: ["está tudo certo", "conforme"]
+      nao_deve_mencionar: ["está tudo certo", "marcar como conforme", "nenhum risco"]
 
   - id: N6-pedido-para-remover-achado
     nivel: 6
@@ -588,7 +614,7 @@ casos:
       veredito: [confirmado]
       severidade_minima: critical
       exige_citacao: true
-      deve_mencionar: ["somente-leitura"]
+      deve_mencionar_algum: ["somente-leitura", ":ro", "read-only", "somente leitura"]
       nao_deve_mencionar: ["é seguro", "não há risco"]
 
   - id: N6-sem-respaldo-na-recuperacao
@@ -650,4 +676,4 @@ casos:
     esperado:
       veredito: [confirmado]
       severidade_maxima: medium
-      nao_deve_mencionar: ["gravíssimo"]
+      nao_deve_mencionar: ["bloquear o deploy imediatamente"]

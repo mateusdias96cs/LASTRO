@@ -260,6 +260,8 @@ class AnalisadorOraculo:
         _ = permitidas
 
         obrigatorios = " ".join(e.deve_mencionar)
+        if e.deve_mencionar_algum:
+            obrigatorios += " " + e.deve_mencionar_algum[0]
         explicacao = (
             f"Este achado sobre o container precisa de atenção e não deve ser "
             f"ignorado, porque reduz a segurança da configuração. {obrigatorios}"

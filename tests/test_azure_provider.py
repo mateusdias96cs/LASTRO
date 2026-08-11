@@ -100,11 +100,47 @@ def test_prompt_inclui_o_documento_canonico():
     assert "socket" in u.lower()
 
 
-def test_prompt_rotula_os_trechos_por_chunk_id():
-    """Sem o chunk_id visível, o modelo não tem como citar corretamente e toda
-    citação reprovaria no verificador de literalidade."""
+def test_prompt_numera_as_referencias():
+    """A primeira rodada real mostrou o modelo transcrevendo `...58d22670a9b`
+    no lugar de `...58d22670a9`. Pedir para copiar hash de 10 dígitos convida
+    o erro; pedir `1` elimina a classe."""
     u = prompt_usuario(_entrada())
-    assert "[dkr:a#0001-aa]" in u
+    assert "[1] fonte=" in u
+    assert "dkr:a#0001-aa" not in u
+
+
+def test_referencia_numerica_vira_chunk_id_real():
+    from conformidade.agents.analysis.azure_provider import _resolver_referencias
+
+    entrada = _entrada()
+    saida = AchadoAnalisado(
+        control_id="CONF-WLD-002",
+        veredito=Veredito.CONFIRMADO,
+        severidade_ajustada=Severity.CRITICAL,
+        explicacao="Explicação longa o suficiente para o verificador considerar substancial.",
+        como_corrigir="Remova a montagem do socket.",
+        citacoes=[Citacao(chunk_id="1", trecho_exato="mounting the docker socket is dangerous")],
+        confianca=Confianca.ALTA,
+    )
+    resolvida = _resolver_referencias(entrada, saida)
+    assert resolvida.citacoes[0].chunk_id == "dkr:a#0001-aa"
+
+
+def test_referencia_irreconhecivel_nao_e_corrigida_em_silencio():
+    """Se o modelo inventar uma referência, o verificador precisa reprovar —
+    não pode sumir numa correção silenciosa."""
+    from conformidade.agents.analysis.azure_provider import _resolver_referencias
+
+    saida = AchadoAnalisado(
+        control_id="CONF-WLD-002",
+        veredito=Veredito.CONFIRMADO,
+        severidade_ajustada=Severity.CRITICAL,
+        explicacao="Explicação longa o suficiente para o verificador considerar substancial.",
+        como_corrigir="Remova a montagem do socket.",
+        citacoes=[Citacao(chunk_id="99", trecho_exato="texto qualquer inventado aqui")],
+        confianca=Confianca.ALTA,
+    )
+    assert _resolver_referencias(_entrada(), saida).citacoes[0].chunk_id == "99"
 
 
 def test_prompt_inclui_o_texto_integral_do_trecho():

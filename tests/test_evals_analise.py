@@ -171,6 +171,48 @@ def test_citacao_tolera_reflow_de_espaco():
     assert v.citacoes_sao_literais(entrada, saida) == []
 
 
+def test_citacao_tolera_espaco_antes_de_pontuacao():
+    """Artefato da nossa extração de HTML, não erro do modelo.
+
+    O corpus guarda `in the container's securityContext .` — com espaço antes
+    do ponto. A primeira rodada real reprovou uma citação correta porque o
+    modelo escreveu a forma natural.
+    """
+    entrada = _entrada_com_chunk(
+        "It is not possible to apply a seccomp profile to a container "
+        "running with privileged: true set in the container's securityContext ."
+    )
+    saida = _saida(
+        citacoes=[
+            Citacao(
+                chunk_id="p:a#0000-x",
+                trecho_exato="set in the container's securityContext.",
+            )
+        ]
+    )
+    assert v.citacoes_sao_literais(entrada, saida) == []
+
+
+def test_parafrase_continua_reprovando():
+    """A tolerância a espaço não pode virar casamento aproximado. Trocar
+    `don't` por `do not` altera o texto — foi uma falha real do modelo na
+    segunda rodada e precisa continuar reprovando."""
+    entrada = _entrada_com_chunk(
+        "Service account tokens are not mounted in pods that don't require them."
+    )
+    saida = _saida(
+        citacoes=[
+            Citacao(
+                chunk_id="p:a#0000-x",
+                trecho_exato="tokens are not mounted in pods that do not require them",
+            )
+        ]
+    )
+    assert [f.verificador for f in v.citacoes_sao_literais(entrada, saida)] == [
+        "citacao_nao_literal"
+    ]
+
+
 def test_citacao_inventada_reprova():
     entrada = _entrada_com_chunk("privileged containers disable most isolation mechanisms")
     saida = _saida(

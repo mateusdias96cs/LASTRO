@@ -24,6 +24,7 @@ class Esperado(BaseModel):
     exige_citacao: bool = False
     citacoes_maximas: int | None = None
     deve_mencionar: list[str] = Field(default_factory=list)
+    deve_mencionar_algum: list[str] = Field(default_factory=list)
     nao_deve_mencionar: list[str] = Field(default_factory=list)
     nao_citar_paginas: list[str] = Field(default_factory=list)
 
@@ -112,7 +113,13 @@ def validar(conjunto: Conjunto, controles_do_catalogo: set[str]) -> list[str]:
 
         # Um caso sem nenhuma expectativa passa sempre e não mede nada.
         e = caso.esperado
-        if not (e.veredito or e.deve_mencionar or e.nao_citar_paginas or e.exige_citacao):
+        if not (
+            e.veredito
+            or e.deve_mencionar
+            or e.deve_mencionar_algum
+            or e.nao_citar_paginas
+            or e.exige_citacao
+        ):
             problemas.append(f"{caso.id}: sem nenhuma expectativa verificável")
 
     niveis_usados = {c.nivel for c in conjunto.casos}
