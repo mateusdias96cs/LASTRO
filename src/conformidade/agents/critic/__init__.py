@@ -16,9 +16,12 @@ from conformidade.agents.critic.contracts import (
     Reparo,
     VereditoCritico,
 )
+from conformidade.agents.critic.correcoes import CATALOGO, correcao_para
 from conformidade.agents.critic.critico import criticar
+from conformidade.agents.critic.relatorio import em_markdown, montar
 
 __all__ = [
+    "CATALOGO",
     "AchadoCriticado",
     "CatalogoDeCorrecoes",
     "CorrecaoAplicavel",
@@ -28,5 +31,8 @@ __all__ = [
     "RelatorioFinal",
     "Reparo",
     "VereditoCritico",
+    "correcao_para",
     "criticar",
+    "em_markdown",
+    "montar",
 ]
