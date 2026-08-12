@@ -38,14 +38,31 @@ def nome_de_cache(url: str) -> str:
     return f"{base}{sufixo}"
 
 
-def obter(page_id: str, url: str, cache: Path, baixar: bool = False) -> Origem | None:
+def obter(
+    page_id: str,
+    url: str,
+    cache: Path,
+    baixar: bool = False,
+    arquivo: str | None = None,
+) -> Origem | None:
     """Devolve a origem a partir do cache, baixando só se pedido.
 
     `None` quando o arquivo não está em cache e o download não foi autorizado —
     o pipeline segue com as demais páginas em vez de abortar.
+
+    `arquivo` nomeia o arquivo no cache diretamente, para fonte que não se
+    obtém por URL. O CIS Benchmark é assim: o PDF fica atrás de um formulário
+    de cadastro, então o download é manual e a URL do manifesto serve só como
+    referência de citação no relatório. Derivar o nome da URL, como fazemos
+    com as demais fontes, apontaria para um arquivo que nunca existirá.
     """
     cache.mkdir(parents=True, exist_ok=True)
-    destino = cache / nome_de_cache(url)
+    destino = cache / (arquivo or nome_de_cache(url))
+
+    # Fonte de download manual não é baixável: se não está no cache, está
+    # ausente, e forçar o download produziria a página HTML do formulário.
+    if arquivo is not None and not destino.exists():
+        return None
 
     if not destino.exists():
         if not baixar:

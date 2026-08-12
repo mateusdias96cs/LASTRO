@@ -7,8 +7,10 @@ pelas probes do AKS e usada também pelos health probes do Container Apps.
 from typing import Any
 
 from fastapi import FastAPI, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from conformidade import __version__
+from conformidade.api.auditoria import router as auditoria_router
 from conformidade.api.deterministic import router as deterministic_router
 from conformidade.api.retrieval import router as retrieval_router
 from conformidade.config import Settings, get_settings
@@ -25,6 +27,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
     )
 
+    # O frontend mora em outro domínio (Container App separado), então o
+    # navegador exige que a API declare de quais origens aceita chamada. Sem
+    # isto toda requisição falha e o erro aparece como falha de rede genérica.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.origens_permitidas,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+        # Não há cookie nem sessão: a API é sem estado e sem autenticação de
+        # usuário. Liberar credenciais só ampliaria a superfície à toa.
+        allow_credentials=False,
+    )
+
+    app.include_router(auditoria_router)
     app.include_router(deterministic_router)
     app.include_router(retrieval_router)
 

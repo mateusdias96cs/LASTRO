@@ -30,6 +30,7 @@ import json
 from pathlib import Path
 
 from conformidade.agents.analysis.contracts import AchadoAnalisado, EntradaAnalise
+from conformidade.agents.retrieval.cobertura import motivo_da_ausencia, tem_respaldo_oficial
 from conformidade.agents.retrieval.controls import documento_de
 
 ESCOPO_COGNITIVE_SERVICES = "https://cognitiveservices.azure.com/.default"
@@ -37,7 +38,7 @@ API_VERSION = "2024-10-21"
 
 # Muda quando o prompt muda. Faz parte da chave do cache: prompt novo precisa
 # de resposta nova, senão o cache mascara o efeito do ajuste.
-VERSAO_DO_PROMPT = "2"
+VERSAO_DO_PROMPT = "3"
 
 
 def _e_modelo_de_raciocinio(nome_deployment: str) -> bool:
@@ -280,7 +281,21 @@ def prompt_usuario(entrada: EntradaAnalise) -> str:
 
     partes += ["", "## TRECHOS OFICIAIS RECUPERADOS"]
     trechos = entrada.recuperacao.trechos if entrada.recuperacao else []
-    if not trechos:
+
+    # A auditoria da camada 2 provou que, para alguns controles, nenhum trecho
+    # oficial utilizável chega até aqui. Nesses casos o modelo recebe a
+    # ausência declarada em vez de uma lista de vizinhos plausíveis — citar
+    # fonte deslocada empresta autoridade de terceiro a uma afirmação que
+    # aquele terceiro não fez, que é a pior falha possível num auditor.
+    if not tem_respaldo_oficial(entrada.control_id):
+        partes += [
+            f"**ESTE CONTROLE NÃO TEM RESPALDO OFICIAL.** {motivo_da_ausencia(entrada.control_id)}",
+            "",
+            "Deixe `citacoes` VAZIO e diga na explicação que a norma vem do "
+            "catálogo interno, sem respaldo textual direto na documentação "
+            "oficial. Não cite nenhum trecho abaixo, ainda que pareça próximo.",
+        ]
+    elif not trechos:
         partes.append("(nenhum — deixe `citacoes` vazio)")
     else:
         partes.append(

@@ -187,14 +187,34 @@ class AnalisadorPreguicoso(AnalisadorHonesto):
 
 
 class AnalisadorQueCitaDistrator(AnalisadorHonesto):
-    """Cita literalmente — mas a página vizinha, não a do controle."""
+    """Cita literalmente — mas a página vizinha, não a do controle.
+
+    Mira o distrator **declarado no gabarito**, não o último trecho recuperado.
+    A versão anterior usava o último, supondo que fosse o menos pertinente —
+    heurística sobre o arranjo do corpus, não sobre o mecanismo. Quando o CIS
+    Docker Benchmark entrou, a ordenação mudou, o último trecho passou a ser
+    fonte legítima e o duplo deixou de exercitar a falha que existe para
+    exercitar: ele "passava" no nível 5 sem que a checagem tivesse melhorado.
+
+    O último trecho continua sendo o recurso quando nenhum distrator declarado
+    está entre os recuperados — aí não há como cometer a falha, e o duplo
+    apenas não a comete.
+    """
 
     def analisar(self, entrada: EntradaAnalise) -> AchadoAnalisado:
+        from conformidade.evals.golden import carregar_gabarito
+
         base = super().analisar(entrada)
         if entrada.recuperacao is None:
             return base
-        # Escolhe o último trecho, que costuma ser o menos pertinente.
-        for trecho in reversed(entrada.recuperacao.trechos):
+
+        caso = carregar_gabarito().caso(entrada.control_id)
+        distratores = set(caso.nao_deve) if caso else set()
+        candidatos = [
+            t for t in entrada.recuperacao.trechos if t.chunk.page_id in distratores
+        ] or list(reversed(entrada.recuperacao.trechos))
+
+        for trecho in candidatos:
             chunk = trecho.chunk
             corpo = chunk.texto.split("\n\n")[-1]
             citacao = Citacao(

@@ -18,7 +18,12 @@ from pydantic import BaseModel, Field
 
 from conformidade.agents.retrieval.contracts import Chunk
 from conformidade.agents.retrieval.ingest.chunker import LIMITE_TOKENS, fatiar, id_do_chunk
-from conformidade.agents.retrieval.ingest.extract import Secao, extrair_html, extrair_pdf
+from conformidade.agents.retrieval.ingest.extract import (
+    Secao,
+    extrair_cis,
+    extrair_html,
+    extrair_pdf,
+)
 from conformidade.agents.retrieval.ingest.fetch import Origem, obter
 
 
@@ -45,8 +50,12 @@ def carregar_manifesto(caminho: Path) -> dict[str, Any]:
     return yaml.safe_load(caminho.read_text(encoding="utf-8"))
 
 
-def _extrair(origem: Origem) -> list[Secao]:
+def _extrair(origem: Origem, formato: str = "") -> list[Secao]:
     caminho = Path(origem.caminho)
+    # `cis` é um PDF, mas com estrutura própria e regular — uma seção por
+    # recomendação, em vez da heurística de títulos numerados do NIST.
+    if formato == "cis":
+        return extrair_cis(str(caminho))
     if caminho.suffix.lower() == ".pdf":
         return extrair_pdf(str(caminho))
     return extrair_html(caminho.read_text(encoding="utf-8", errors="replace"))
@@ -72,14 +81,14 @@ def ingerir(
         page_id = pagina["id"]
         relatorio.total_paginas += 1
 
-        origem = obter(page_id, pagina["url"], cache, baixar=baixar)
+        origem = obter(page_id, pagina["url"], cache, baixar=baixar, arquivo=pagina.get("arquivo"))
         if origem is None:
             relatorio.paginas_ausentes.append(page_id)
             continue
 
         resultado = ResultadoPagina(page_id=page_id, sha256=origem.sha256)
         try:
-            secoes = _extrair(origem)
+            secoes = _extrair(origem, pagina.get("formato", ""))
         except Exception as exc:  # noqa: BLE001 - uma fonte ruim não derruba as outras
             resultado.erro = f"{type(exc).__name__}: {exc}"
             relatorio.paginas_com_erro += 1

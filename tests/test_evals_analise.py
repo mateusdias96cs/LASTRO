@@ -52,10 +52,19 @@ def test_todo_controle_dos_casos_existe_no_catalogo():
 
 
 def test_nivel_5_cobre_os_distratores_medidos():
-    """Os 5 pares confundíveis medidos na Fase 3 precisam estar aqui."""
+    """Os pares que a busca realmente confunde precisam estar aqui.
+
+    Eram cinco. Com a entrada do CIS Docker Benchmark no corpus, o distrator
+    do `CONF-K8S-005` (`dkr:compose-services`) saiu do top-6 e o par deixou de
+    existir — medido, não suposto. O caso virou `N1-hostport-direto`.
+
+    Se um destes quatro também deixar de confundir, este teste continua
+    passando e é a auditoria da camada 2 que acusa; o inverso, remover um caso
+    de um par que ainda confunde, falha aqui.
+    """
     nivel5 = [c for c in CONJUNTO.casos if c.nivel == 5]
     controles = {c.achado["control_id"] for c in nivel5}
-    assert {"CONF-WLD-008", "CONF-K8S-003", "CONF-SEC-001", "CONF-K8S-005"} <= controles
+    assert {"CONF-WLD-008", "CONF-K8S-003", "CONF-SEC-001", "CONF-K8S-004"} <= controles
     for caso in nivel5:
         assert caso.esperado.nao_citar_paginas, f"{caso.id} sem distrator declarado"
 

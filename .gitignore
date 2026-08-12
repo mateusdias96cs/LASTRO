@@ -43,3 +43,9 @@ contexto.md
 
 # Cache das respostas da camada 3 — regenerável, derivado do conteúdo.
 .cache-analise/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/tsconfig.tsbuildinfo
