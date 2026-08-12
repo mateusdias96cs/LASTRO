@@ -63,7 +63,9 @@ casos:
       # O modelo escreveu «o container deixa de ser uma fronteira de segurança»
       # e «desativa mecanismos de confinamento» — a substância exata, sem a
       # palavra exigida. Este verificador mede conteúdo, não vocabulário.
-      deve_mencionar_algum: ["isolamento", "confinamento", "fronteira de segurança"]
+      # Radical, não a palavra exata: o modelo escreveu «deixa de ser um ambiente
+      # isolado», que é a substância certa com outra flexão.
+      deve_mencionar_algum: ["isola", "confina", "fronteira de segurança"]
 
   - id: N1-docker-sock-aplicacao
     nivel: 1
@@ -122,7 +124,12 @@ casos:
     esperado:
       veredito: [confirmado]
       severidade_minima: medium
-      exige_citacao: true
+      # `exige_citacao` removido: o CONF-IMG-002 está em
+      # `cobertura.SEM_RESPALDO_OFICIAL`, e o prompt manda explicitamente
+      # deixar `citacoes` vazio para esses controles. Exigir citação aqui era
+      # contradição entre a avaliação e o próprio sistema — o modelo obedeceu
+      # ao prompt e reprovou por isso. Há teste de integridade impedindo a
+      # recaída.
 
   - id: N1-cap-sys-admin
     nivel: 1

@@ -122,6 +122,19 @@ def validar(conjunto: Conjunto, controles_do_catalogo: set[str]) -> list[str]:
         ):
             problemas.append(f"{caso.id}: sem nenhuma expectativa verificável")
 
+        # Contradição entre a avaliação e o próprio sistema: o prompt manda
+        # deixar `citacoes` vazio para controle sem respaldo declarado, e o
+        # caso exigiria citação. O modelo obedece ao prompt e reprova por
+        # isso — falha garantida que não mede nada do agente.
+        if e.exige_citacao:
+            from conformidade.agents.retrieval.cobertura import SEM_RESPALDO_OFICIAL
+
+            if cid in SEM_RESPALDO_OFICIAL:
+                problemas.append(
+                    f"{caso.id}: exige citação de `{cid}`, que está declarado em "
+                    "SEM_RESPALDO_OFICIAL — o prompt manda não citar"
+                )
+
     niveis_usados = {c.nivel for c in conjunto.casos}
     sem_limiar = niveis_usados - set(conjunto.taxa_minima_por_nivel)
     if sem_limiar:
