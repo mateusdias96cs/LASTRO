@@ -5,7 +5,7 @@
 # for Containers e push mais rápido para o ACR.
 
 # ---------- estágio de build ----------
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 # Pin do uv casado com o que gerou o uv.lock (lockfile v1/revision 3).
 COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /bin/uv
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
 
 # ---------- imagem final ----------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 LABEL org.opencontainers.image.title="conformidade" \
       org.opencontainers.image.description="Sistema multi-agente de conformidade para Docker e Kubernetes" \
