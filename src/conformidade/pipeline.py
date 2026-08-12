@@ -31,6 +31,8 @@ código.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 
 from conformidade.agents.analysis.contracts import (
     AchadoAnalisado,
@@ -42,6 +44,10 @@ from conformidade.agents.critic import criticar
 from conformidade.agents.critic.aplicar import Aplicacao, aplicar
 from conformidade.agents.critic.contracts import AchadoCriticado, Formato
 from conformidade.agents.deterministic import ArtifactKind, Finding, analyze
+
+# Quantos trechos a camada 3 recebe. Medido: subir para 10 ganha um controle
+# com respaldo e quase triplica a exposição a distratores.
+K_TRECHOS = 6
 
 _FORMATO = {
     ArtifactKind.DOCKERFILE: Formato.DOCKERFILE,
@@ -57,7 +63,19 @@ class Resultado:
     achados: list[Finding]
     aplicacao: Aplicacao
     criticados: list[tuple[EntradaAnalise, AchadoCriticado]] = field(default_factory=list)
-    com_analise: bool = False
+    # Quantos achados a camada 3 de fato explicou. Contar em vez de um booleano
+    # porque a degradação é PARCIAL: com o deployment limitado a poucas
+    # requisições por minuto, um arquivo com dez achados pode ter três
+    # explicados e sete no catálogo. Um `com_analise: true` nesse caso seria
+    # verdadeiro e enganoso.
+    explicados_por_ia: int = 0
+    # Por que a camada 3 não participou, quando não participou. Vazio quando
+    # participou em tudo.
+    motivo_sem_ia: str = ""
+
+    @property
+    def com_analise(self) -> bool:
+        return self.explicados_por_ia > 0
 
     @property
     def markdown(self) -> str:
@@ -97,17 +115,28 @@ def _sem_analise(achado: Finding) -> AchadoAnalisado:
     )
 
 
+_SENTINELA = object()
+
+
 def auditar(
     conteudo: str,
     arquivo: str = "entrada.yaml",
     contexto: str = "",
-    analisador=None,
-    recuperador=None,
+    analisador=_SENTINELA,
+    recuperador=_SENTINELA,
 ) -> Resultado:
     """Roda as quatro camadas e devolve o resultado pronto para renderizar.
 
-    `analisador` e `recuperador` são injetados para a avaliação poder trocá-los
-    por duplos. Ausentes, a camada 3 é pulada e o resultado sai determinístico.
+    Sem argumento, monta as camadas 2 e 3 de verdade. `None` explícito as
+    desliga; um objeto as substitui, que é como a avaliação injeta duplos.
+
+    A sentinela existe porque o padrão anterior era `None` e isso produziu um
+    bug silencioso caro: a rota da API chamava `auditar(texto, arquivo=...)` sem
+    passar nada, as camadas 2 e 3 ficavam desligadas, e o sistema em produção
+    respondia sem citação nenhuma e com o aviso de "IA indisponível" em toda
+    análise. O comportamento parecia um fallback sendo acionado por rate limit
+    do Azure, e horas foram gastas investigando o lado errado. Agora o padrão é
+    ligar; desligar exige dizer.
     """
     relatorio = analyze(conteudo, filename=arquivo)
     achados = list(relatorio.findings)
@@ -115,8 +144,16 @@ def auditar(
 
     aplicacao = aplicar(conteudo, achados, formato)
 
+    motivo = ""
+    if recuperador is _SENTINELA:
+        recuperador, falha = _recuperador_padrao()
+        motivo = motivo or falha
+    if analisador is _SENTINELA:
+        analisador, falha = _analisador_padrao()
+        motivo = motivo or falha
+
     criticados: list[tuple[EntradaAnalise, AchadoCriticado]] = []
-    com_analise = analisador is not None
+    explicados = 0
 
     for achado in achados:
         recuperacao = None
@@ -132,8 +169,13 @@ def auditar(
         else:
             try:
                 saida = analisador.analisar(entrada)
-            except Exception:  # noqa: BLE001 - o arquivo corrigido não depende do LLM
+                explicados += 1
+            except Exception as exc:  # noqa: BLE001 - o arquivo corrigido não depende do LLM
+                # Degradação por achado, não por requisição: o limite de
+                # requisições por minuto do deployment derruba os últimos de um
+                # arquivo grande, e os primeiros continuam valendo.
                 saida = _sem_analise(achado)
+                motivo = motivo or f"{type(exc).__name__}: {exc}"
         criticados.append((entrada, criticar(entrada, saida)))
 
     return Resultado(
@@ -142,5 +184,82 @@ def auditar(
         achados=achados,
         aplicacao=aplicacao,
         criticados=criticados,
-        com_analise=com_analise,
+        explicados_por_ia=explicados,
+        motivo_sem_ia="" if explicados == len(achados) else motivo,
     )
+
+
+# --------------------------------------------------------------------------
+# Montagem das camadas 2 e 3
+# --------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _retriever():
+    """Índice híbrido, carregado uma vez e mantido em memória.
+
+    1.271 chunks × 384 dimensões são ~2 MB e a busca exata custa menos de um
+    milissegundo; recarregar por requisição desperdiçaria segundos à toa.
+    """
+    from conformidade.agents.retrieval.index import HybridRetriever, LexicalIndex
+    from conformidade.agents.retrieval.index.build import (
+        carregar_consultas,
+        carregar_indice_denso,
+        ler_meta,
+    )
+    from conformidade.agents.retrieval.ingest import carregar_chunks
+    from conformidade.config import get_settings
+
+    base = Path(get_settings().corpus_dir)
+    chunks = carregar_chunks(base / "chunks.jsonl")
+    denso = None
+    consultas = None
+    if (base / "index" / "vectors.npy").exists():
+        denso = carregar_indice_denso(chunks, base / "index")
+        consultas = carregar_consultas(base / "index")
+    return HybridRetriever(
+        chunks,
+        lexical=LexicalIndex(chunks),
+        denso=denso,
+        vetores_de_consulta=consultas,
+        corpus_versao=ler_meta(base / "index").get("corpus_versao", ""),
+    )
+
+
+def _recuperador_padrao():
+    """`(recuperador, motivo)` — motivo preenchido quando não dá para montar."""
+    from conformidade.agents.retrieval.queries import consulta_de
+
+    try:
+        retriever = _retriever()
+    except (OSError, ValueError) as exc:
+        return None, f"corpus indisponível: {exc}"
+
+    def recuperar(control_id: str):
+        consulta = consulta_de(control_id)
+        if not consulta:
+            return None
+        return retriever.buscar(control_id, consulta, k=K_TRECHOS)
+
+    return recuperar, ""
+
+
+@lru_cache(maxsize=1)
+def _analisador_ou_motivo():
+    """Cliente do Azure, ou o motivo de não haver um.
+
+    Em cache porque construir envolve resolver credencial gerenciada, o que
+    custa uma ida à rede e não muda entre requisições.
+    """
+    from conformidade.agents.analysis.azure_provider import AnalisadorAzureOpenAI
+
+    try:
+        return AnalisadorAzureOpenAI(), ""
+    except ValueError as exc:
+        # Falta de configuração é estado esperado em desenvolvimento local, não
+        # erro: o arquivo corrigido não depende da camada 3.
+        return None, f"camada de IA não configurada ({exc})"
+
+
+def _analisador_padrao():
+    return _analisador_ou_motivo()
