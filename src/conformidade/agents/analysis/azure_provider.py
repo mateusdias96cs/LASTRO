@@ -61,6 +61,8 @@ class AnalisadorAzureOpenAI:
         cache_dir: Path | None = None,
         temperatura: float = 0.0,
     ) -> None:
+        """Não toca a rede. A credencial e o cliente são criados na primeira
+        análise — construir aqui acoplaria o start da aplicação ao Azure."""
         from conformidade.config import get_settings
 
         settings = get_settings()
@@ -73,6 +75,7 @@ class AnalisadorAzureOpenAI:
             )
 
         self._temperatura = temperatura
+        self._client_id = settings.azure_client_id
         self._cache_dir = cache_dir or Path(settings.analise_cache_dir)
         self._cliente = None  # criado sob demanda: import pesado e credencial
 
@@ -83,11 +86,24 @@ class AnalisadorAzureOpenAI:
             from azure.identity import DefaultAzureCredential, get_bearer_token_provider
             from openai import AzureOpenAI
 
-            # DefaultAzureCredential resolve a identidade gerenciada no Container
-            # App e cai para `az login` na máquina de quem desenvolve — o mesmo
-            # código funciona nos dois lugares, sem chave.
+            # `DefaultAzureCredential` resolve a identidade gerenciada no
+            # Container App e cai para `az login` na máquina de quem
+            # desenvolve — o mesmo código nos dois lugares, sem chave.
+            #
+            # `managed_identity_client_id` não é opcional aqui, e a ausência
+            # dele é armadilha silenciosa. A identidade deste Container App é
+            # **atribuída pelo usuário**, e um recurso pode ter várias. Sem o
+            # client id, o pedido de token ao IMDS é ambíguo: a credencial não
+            # tem como saber qual identidade usar e falha na aquisição do
+            # token, não na construção. O erro aparece longe da causa, na
+            # primeira chamada ao modelo, disfarçado de problema do Azure
+            # OpenAI.
+            #
+            # Local não tem `CONFORMIDADE_AZURE_CLIENT_ID`, o argumento vai
+            # `None`, e `az login` continua atendendo normalmente.
             provedor = get_bearer_token_provider(
-                DefaultAzureCredential(), ESCOPO_COGNITIVE_SERVICES
+                DefaultAzureCredential(managed_identity_client_id=self._client_id or None),
+                ESCOPO_COGNITIVE_SERVICES,
             )
             self._cliente = AzureOpenAI(
                 azure_endpoint=self._endpoint,

@@ -123,3 +123,67 @@ def test_rota_de_texto_puro_devolve_so_o_arquivo(cliente):
     assert r.status_code == 200
     assert r.text.startswith("services:")
     assert "privileged: false" in r.text
+
+
+# ---------------------------------------------------------- diagnóstico
+
+
+def test_diagnostico_responde_por_que_nao_houve_ia(cliente):
+    """Existe para responder numa chamada o que custou uma sessão de
+    investigação: a mensagem dizia "não configurada" com a configuração
+    correta, e a busca foi para o recurso errado."""
+    corpo = cliente.get("/api/v1/diagnostico").json()
+    assert "camada_3_configurada" in corpo
+    assert "camada_3_motivo" in corpo
+    assert "camada_3_credencial" in corpo
+
+
+def test_diagnostico_nao_vaza_valor_de_configuracao(monkeypatch):
+    """Informa presença, nunca valor: endpoint e client id não podem aparecer
+    numa rota sem autenticação."""
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://segredo.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "gpt-secreto")
+    monkeypatch.setenv("CONFORMIDADE_AZURE_CLIENT_ID", "id-secreto")
+    from conformidade.config import get_settings
+    from conformidade.pipeline import _analisador_ou_motivo
+
+    get_settings.cache_clear()
+    _analisador_ou_motivo.cache_clear()
+
+    texto = TestClient(create_app()).get("/api/v1/diagnostico").text
+
+    get_settings.cache_clear()
+    _analisador_ou_motivo.cache_clear()
+
+    assert "segredo.openai" not in texto
+    assert "gpt-secreto" not in texto
+    assert "id-secreto" not in texto
+    assert '"endpoint_definido":true' in texto.replace(" ", "")
+
+
+def test_motivo_distingue_configuracao_ausente_de_outra_falha():
+    """A mensagem genérica anterior mandava investigar o lado errado."""
+    from conformidade.config import get_settings
+    from conformidade.pipeline import _analisador_ou_motivo
+
+    get_settings.cache_clear()
+    _analisador_ou_motivo.cache_clear()
+    _, motivo = _analisador_ou_motivo()
+    _analisador_ou_motivo.cache_clear()
+    get_settings.cache_clear()
+
+    assert "AZURE_OPENAI_ENDPOINT" in motivo
+    assert "não configurada" not in motivo
+
+
+def test_client_id_da_identidade_gerenciada_chega_ao_provider(monkeypatch):
+    """Identidade atribuída pelo usuário exige client id explícito: sem ele o
+    pedido de token é ambíguo e falha longe da causa."""
+    monkeypatch.setenv("CONFORMIDADE_AZURE_CLIENT_ID", "1234-abcd")
+    from conformidade.agents.analysis.azure_provider import AnalisadorAzureOpenAI
+    from conformidade.config import get_settings
+
+    get_settings.cache_clear()
+    provider = AnalisadorAzureOpenAI(endpoint="https://x/", deployment="d")
+    get_settings.cache_clear()
+    assert provider._client_id == "1234-abcd"
