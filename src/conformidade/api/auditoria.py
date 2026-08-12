@@ -24,6 +24,41 @@ router = APIRouter(prefix="/api/v1", tags=["auditoria"])
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 
 
+class CitacaoNaResposta(BaseModel):
+    trecho: str
+    url: str = ""
+
+
+class AchadoNaResposta(BaseModel):
+    """Um achado, no formato que a tela precisa.
+
+    Achatado de propósito. O frontend não deve navegar
+    `criticado.analisado.citacoes[].trecho_exato` para mostrar uma citação —
+    isso acoplaria a interface à estrutura interna das camadas 3 e 4, e
+    qualquer refatoração interna quebraria a tela.
+    """
+
+    control_id: str
+    titulo: str
+    severidade: str
+    veredito: str
+    explicacao: str
+    # Trecho recortado do arquivo enviado. Vai para a tela dentro de bloco de
+    # código, nunca como texto corrido — é dado do usuário, não nosso.
+    evidencia: str = ""
+    onde: str = ""
+    citacoes: list[CitacaoNaResposta] = Field(default_factory=list)
+    # Preenchido quando não há fonte oficial para o controle. A tela declara a
+    # ausência em vez de deixar o espaço vazio, que pareceria descuido.
+    aviso_de_respaldo: str = ""
+    # O que o verificador automático reparou na análise, se reparou.
+    ressalvas: list[str] = Field(default_factory=list)
+    # Trecho de configuração e onde encaixar.
+    correcao: str = ""
+    correcao_caminho: str = ""
+    corrigido_automaticamente: bool = False
+
+
 class RespostaAuditoria(BaseModel):
     arquivo: str
     formato: str
@@ -34,6 +69,7 @@ class RespostaAuditoria(BaseModel):
     # O que o usuário cola no lugar do original.
     configuracao_corrigida: str = ""
     relatorio_markdown: str = ""
+    achados: list[AchadoNaResposta] = Field(default_factory=list)
 
 
 async def _ler(file: UploadFile) -> tuple[str, str]:
@@ -67,6 +103,51 @@ def _executar(texto: str, nome: str, contexto: str):
         ) from exc
 
 
+_ORDEM_SEVERIDADE = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
+
+def _achados(resultado) -> list[AchadoNaResposta]:
+    from conformidade.agents.critic.correcoes import correcao_para
+    from conformidade.agents.retrieval.cobertura import AVISO_PADRAO, motivo_da_ausencia
+
+    por_controle = {c.control_id: c for _, c in resultado.criticados}
+    aplicados = set(resultado.aplicacao.aplicados)
+    saida: list[AchadoNaResposta] = []
+
+    for achado in resultado.achados:
+        criticado = por_controle.get(achado.control_id)
+        analisado = criticado.analisado if criticado else None
+        correcao = correcao_para(achado.control_id, resultado.formato)
+        motivo = motivo_da_ausencia(achado.control_id)
+        citacoes = [
+            CitacaoNaResposta(trecho=c.trecho_exato, url=c.url)
+            for c in (analisado.citacoes if analisado else [])
+        ]
+        saida.append(
+            AchadoNaResposta(
+                control_id=achado.control_id,
+                titulo=achado.title,
+                severidade=achado.severity.value,
+                veredito=analisado.veredito.value if analisado else "confirmado",
+                explicacao=analisado.explicacao if analisado else achado.message,
+                evidencia=achado.evidence or "",
+                onde=achado.target or "",
+                citacoes=citacoes,
+                aviso_de_respaldo=(f"{AVISO_PADRAO} {motivo}" if motivo and not citacoes else ""),
+                ressalvas=[
+                    f"{o.reparo.value}: {o.detalhe}"
+                    for o in (criticado.objecoes if criticado else ())
+                ],
+                correcao=correcao.trecho if correcao else "",
+                correcao_caminho=correcao.caminho if correcao else "",
+                corrigido_automaticamente=achado.control_id in aplicados,
+            )
+        )
+
+    saida.sort(key=lambda a: (_ORDEM_SEVERIDADE.get(a.severidade, 9), a.control_id))
+    return saida
+
+
 @router.post("/auditar", response_model=RespostaAuditoria)
 async def post_auditar(
     file: Annotated[UploadFile, File()],
@@ -89,6 +170,7 @@ async def post_auditar(
         com_analise=resultado.com_analise,
         configuracao_corrigida=resultado.aplicacao.conteudo,
         relatorio_markdown=resultado.markdown,
+        achados=_achados(resultado),
     )
 
 
