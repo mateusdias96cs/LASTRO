@@ -20,8 +20,9 @@ export function Carregando({ demorando }: { demorando: boolean }) {
       <p className="text-sm text-slate-700">Analisando sua configuração…</p>
       {demorando && (
         <p className="max-w-md text-center text-xs text-slate-500">
-          O servidor estava em repouso e precisa iniciar. Isso acontece só na primeira
-          análise depois de um tempo parado e pode levar alguns segundos.
+          A primeira análise de um arquivo novo passa por todas as camadas e pode levar
+          alguns minutos — o servidor pode estar iniciando, e cada achado é explicado
+          individualmente. Analisar o mesmo arquivo de novo é praticamente instantâneo.
         </p>
       )}
     </div>

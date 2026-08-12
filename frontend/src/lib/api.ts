@@ -20,10 +20,22 @@
 
 import type { Auditoria } from "@/lib/contratos";
 
-/** Generoso por causa do cold start. Ver o bloco acima. */
-export const TIMEOUT_MS = 60_000;
+/**
+ * Generoso por dois motivos somados, não um.
+ *
+ * O cold start responde por 10 a 20 segundos. A camada de IA responde pelo
+ * resto: o modelo de raciocínio leva ~20s por achado, e um compose comum
+ * produz nove. Mesmo com as chamadas paralelizadas, um arquivo grande em
+ * servidor frio passa folgado de um minuto.
+ *
+ * Medido: nove achados em sequência levaram 2m57s; a mesma análise com o
+ * cache quente, 0,45s. A primeira vez é sempre a cara.
+ */
+export const TIMEOUT_MS = 180_000;
 /** A partir daqui a tela avisa que a demora é esperada. */
 export const AVISO_DEMORA_MS = 4_000;
+/** A partir daqui a espera deixou de ser cold start e virou análise. */
+export const AVISO_ANALISE_MS = 25_000;
 
 export type TipoDeErro =
   | "configuracao"

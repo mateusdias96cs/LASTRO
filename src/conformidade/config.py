@@ -41,6 +41,19 @@ class Settings(BaseSettings):
     # Cache das respostas da camada 3, com chave derivada do conteúdo.
     analise_cache_dir: str = ".cache-analise"
 
+    # Quantos achados a camada 3 analisa em paralelo.
+    #
+    # O modelo de raciocínio leva ~20s por achado, então nove achados em
+    # sequência levam três minutos — mais que qualquer timeout razoável de
+    # navegador. Paralelizar é o que traz isso para a casa dos segundos.
+    #
+    # O teto precisa caber na cota do deployment: acima dela o serviço devolve
+    # 429, o SDK tenta de novo com espera exponencial, e o tempo total fica
+    # PIOR que o sequencial — foi o que aconteceu numa medição real, 4m56s
+    # contra 2m57s da rodada anterior. Subir isto sem subir a cota junto
+    # piora.
+    analise_paralela: int = 4
+
     # Origens autorizadas a chamar a API pelo navegador, separadas por vírgula.
     #
     # Sem isto o frontend não funciona, e falha do jeito mais confuso possível:

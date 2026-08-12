@@ -155,9 +155,7 @@ def auditar(
         analisador, falha = _analisador_padrao()
         motivo = motivo or falha
 
-    criticados: list[tuple[EntradaAnalise, AchadoCriticado]] = []
-    explicados = 0
-
+    entradas = []
     for achado in achados:
         recuperacao = None
         if recuperador is not None:
@@ -165,33 +163,15 @@ def auditar(
                 recuperacao = recuperador(achado.control_id)
             except Exception:  # noqa: BLE001 - fonte indisponível não derruba a auditoria
                 recuperacao = None
+        entradas.append((achado, _entrada(arquivo, achado, contexto, recuperacao)))
 
-        entrada = _entrada(arquivo, achado, contexto, recuperacao)
-        if analisador is None:
-            saida = _sem_analise(achado)
-        else:
-            try:
-                saida = analisador.analisar(entrada)
-                explicados += 1
-            except Exception as exc:  # noqa: BLE001 - o arquivo corrigido não depende do LLM
-                # Degradação por achado, não por requisição: o limite de
-                # requisições por minuto do deployment derruba os últimos de um
-                # arquivo grande, e os primeiros continuam valendo.
-                #
-                # O log traz a exceção inteira; o usuário recebe só a primeira,
-                # resumida. Sem isto, um erro de permissão em produção chega
-                # como "sem explicação" e não há como saber de quê.
-                _log.warning(
-                    "camada 3 falhou neste achado",
-                    extra={
-                        "control_id": achado.control_id,
-                        "erro": type(exc).__name__,
-                        "detalhe": str(exc),
-                    },
-                )
-                saida = _sem_analise(achado)
-                motivo = motivo or f"{type(exc).__name__}: {exc}"
-        criticados.append((entrada, criticar(entrada, saida)))
+    saidas, explicados, falha = _analisar_em_lote(entradas, analisador)
+    motivo = motivo or falha
+
+    criticados: list[tuple[EntradaAnalise, AchadoCriticado]] = [
+        (entrada, criticar(entrada, saida))
+        for (_, entrada), saida in zip(entradas, saidas, strict=True)
+    ]
 
     return Resultado(
         arquivo=arquivo,
@@ -340,3 +320,57 @@ def diagnostico() -> dict[str, object]:
         "client_id_definido": bool(settings.azure_client_id),
         "corpus_dir": settings.corpus_dir,
     }
+
+
+def _analisar_em_lote(entradas, analisador):
+    """Chama a camada 3 em paralelo, preservando a ordem dos achados.
+
+    Sequencial, nove achados levavam quase três minutos — o modelo de
+    raciocínio gasta ~20s por chamada, e nenhum navegador espera isso. Em
+    paralelo o tempo cai para o de uma rodada mais a fila.
+
+    Threads e não `asyncio`: o SDK do OpenAI aqui é síncrono, e a espera é de
+    rede. Reescrevê-lo para assíncrono só para paralelizar E/S seria trocar o
+    caminho inteiro da camada 3 por ganho nenhum.
+
+    A ordem da saída acompanha a das entradas, não a de conclusão — relatório
+    de auditoria precisa sair igual a cada execução com a mesma entrada.
+    """
+    if analisador is None:
+        return [_sem_analise(a) for a, _ in entradas], 0, ""
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    from conformidade.config import get_settings
+
+    limite = max(1, get_settings().analise_paralela)
+    saidas: list = [None] * len(entradas)
+    explicados = 0
+    falha = ""
+
+    def trabalho(indice):
+        achado, entrada = entradas[indice]
+        try:
+            return indice, analisador.analisar(entrada), None
+        except Exception as exc:  # noqa: BLE001 - o arquivo corrigido não depende do LLM
+            # Degradação por achado, não por requisição: estourar a cota
+            # derruba alguns e os outros continuam valendo.
+            _log.warning(
+                "camada 3 falhou neste achado",
+                extra={
+                    "control_id": achado.control_id,
+                    "erro": type(exc).__name__,
+                    "detalhe": str(exc),
+                },
+            )
+            return indice, _sem_analise(achado), exc
+
+    with ThreadPoolExecutor(max_workers=min(limite, len(entradas) or 1)) as pool:
+        for indice, saida, exc in pool.map(trabalho, range(len(entradas))):
+            saidas[indice] = saida
+            if exc is None:
+                explicados += 1
+            elif not falha:
+                falha = f"{type(exc).__name__}: {exc}"
+
+    return saidas, explicados, falha
