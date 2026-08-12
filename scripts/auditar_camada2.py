@@ -85,6 +85,44 @@ _CRASE = re.compile(r"`([^`\n]+)`")
 # O texto oficial escreve o campo aninhado em YAML, não na forma pontuada.
 _IDENT = re.compile(r"[A-Za-z][A-Za-z0-9_-]{2,}")
 
+# Frase que PRESCREVE, não apenas descreve. É o que separa uma norma de uma
+# menção — e o que permite usar todas as grafias de um campo sem falso
+# positivo. `read_only` aparece na tabela de volumes do Compose ("Flag to set
+# the volume as read-only") e no CIS 5.13 ("should be treated as a golden
+# image by using Docker run's --read-only option"). A segunda prescreve; a
+# primeira descreve outro campo com o mesmo nome.
+_MODAL = re.compile(
+    r"\b(must not|must|should not|should|never|do not|don't|avoid|"
+    r"disallow(?:ed)?|forbidden|required|recommend(?:ed)?|prohibited)\b",
+    re.I,
+)
+_FRASE = re.compile(r"(?<=[.!?])\s+")
+
+
+_SEPARADOR = re.compile(r"[_\-]")
+
+
+def _grafia(texto: str) -> str:
+    """Normaliza `_` e `-`, que separam palavras no mesmo nome de campo.
+
+    O mesmo controle se escreve `read_only` no Compose e `--read-only` na CLI
+    da Docker, e o CIS Benchmark usa a segunda forma. Casar substring exata
+    tratava as duas como campos diferentes, e um trecho oficial que enuncia a
+    norma não era contado como portador.
+    """
+    return _SEPARADOR.sub("", texto.lower())
+
+
+def _enuncia_norma(texto: str, termos: set[str]) -> bool:
+    """Alguma frase nomeia o campo E prescreve algo sobre ele?"""
+    termos = {_grafia(t) for t in termos}
+    baixo = _grafia(texto)
+    if not any(t in baixo for t in termos):
+        return False
+    return any(
+        any(t in _grafia(f) for t in termos) and _MODAL.search(f) for f in _FRASE.split(texto)
+    )
+
 
 # ---------------------------------------------------------------- estruturas
 
@@ -146,7 +184,7 @@ def _identificadores(control_id: str) -> set[str]:
 def passo_1_cobertura(chunks: list[Chunk], control_ids: list[str], corte: int) -> dict[str, Achado]:
     """O texto normativo existe no corpus? Substring no texto cru, sem
     tokenizador — presença é verdade do corpus, não do índice."""
-    textos = [c.texto.lower() for c in chunks]
+    textos = [_grafia(c.texto) for c in chunks]
     df_token: Counter[str] = Counter()
     for c in chunks:
         df_token.update(set(tokenizar(c.texto)))
@@ -156,24 +194,29 @@ def passo_1_cobertura(chunks: list[Chunk], control_ids: list[str], corte: int) -
         candidatos = _identificadores(cid)
         viaveis = []
         for t in sorted(candidatos):
-            df_texto = sum(1 for x in textos if t in x)
+            df_texto = sum(1 for x in textos if _grafia(t) in x)
             if 0 < df_texto <= corte:
                 viaveis.append(Termo(t, df_texto, df_token.get(t, 0)))
 
-        # Só o(s) termo(s) de menor df. A primeira versão aceitava qualquer
-        # termo abaixo do corte e reportou `CONF-WLD-008` como ok: ela casou
-        # com `read_only` (df=3) num chunk do Compose onde a flag é do
-        # **volume**, não da raiz — exatamente o par confundível que o controle
-        # existe para separar. `readOnlyRootFilesystem` (df=1) não tem essa
-        # ambiguidade. Menor df = termo menos ambíguo, e é regra derivada do
-        # corpus, não julgamento meu.
-        menor = min((t.df_texto for t in viaveis), default=0)
-        termos = [t for t in viaveis if t.df_texto == menor]
+        # TODAS as grafias discriminativas, não só a de menor df.
+        #
+        # A versão anterior mantinha apenas o termo de menor frequência, para
+        # fugir do falso positivo do `read_only` de volume do Compose. Isso
+        # tornou a sonda cega a vocabulário: o mesmo campo se chama
+        # `readOnlyRootFilesystem` no Kubernetes, `read_only` no Compose e
+        # `--read-only` na CLI, e o CIS Docker Benchmark usa a terceira forma.
+        # Um trecho oficial que enuncia a norma perfeitamente não era contado.
+        #
+        # O falso positivo agora é barrado por `_enuncia_norma`, que exige
+        # modal prescritivo na mesma frase — critério que mede o que a sonda
+        # sempre quis medir (o documento **enuncia a norma**?) em vez de
+        # grafia. Ver `passo_2_recuperabilidade`.
+        termos = viaveis
 
         if termos:
             achados[cid] = Achado(cid, auditavel=True, termos=termos)
         else:
-            ausentes = sorted(t for t in candidatos if not any(t in x for x in textos))
+            ausentes = sorted(t for t in candidatos if not any(_grafia(t) in x for x in textos))
             motivo = (
                 f"identificadores ausentes do corpus: {ausentes}"
                 if ausentes
@@ -215,7 +258,7 @@ def passo_2_recuperabilidade(
         if not achado.auditavel:
             continue
         alvo = {t.termo for t in achado.termos}
-        portadores = {c.chunk_id for c in chunks if any(t in c.texto.lower() for t in alvo)}
+        portadores = {c.chunk_id for c in chunks if _enuncia_norma(c.texto, alvo)}
         achado.chunks_portadores = len(portadores)
 
         consulta = consulta_de(cid)
