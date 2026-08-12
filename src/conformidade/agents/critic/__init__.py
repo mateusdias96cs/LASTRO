@@ -5,6 +5,7 @@ trava: confere a saída do analista sem modelo nenhum, e rebaixa ou descarta o
 que não se sustenta.
 """
 
+from conformidade.agents.critic.aplicar import Aplicacao, aplicar
 from conformidade.agents.critic.contracts import (
     AchadoCriticado,
     CatalogoDeCorrecoes,
@@ -18,7 +19,7 @@ from conformidade.agents.critic.contracts import (
 )
 from conformidade.agents.critic.correcoes import CATALOGO, correcao_para
 from conformidade.agents.critic.critico import criticar
-from conformidade.agents.critic.relatorio import em_markdown, montar
+from conformidade.agents.critic.relatorio import em_markdown
 
 __all__ = [
     "CATALOGO",
@@ -33,6 +34,7 @@ __all__ = [
     "VereditoCritico",
     "correcao_para",
     "criticar",
+    "Aplicacao",
+    "aplicar",
     "em_markdown",
-    "montar",
 ]

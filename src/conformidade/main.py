@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import FastAPI, Response, status
 
 from conformidade import __version__
+from conformidade.api.auditoria import router as auditoria_router
 from conformidade.api.deterministic import router as deterministic_router
 from conformidade.api.retrieval import router as retrieval_router
 from conformidade.config import Settings, get_settings
@@ -25,6 +26,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
     )
 
+    app.include_router(auditoria_router)
     app.include_router(deterministic_router)
     app.include_router(retrieval_router)
 

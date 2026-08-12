@@ -1,36 +1,36 @@
-"""Montagem do relatório final.
+"""Renderização do relatório final.
 
-A ordem das duas partes não é estética. Quem envia um arquivo quer, primeiro,
-**o que fazer** — o trecho para colar. A fundamentação vem depois, para quem
-precisar defender a mudança numa revisão ou provar conformidade numa auditoria.
+Quatro seções, na ordem em que servem a quem não é especialista:
 
-Nada aqui usa LLM. O texto explicativo vem da camada 3, já criticado; a
-configuração vem do catálogo escrito à mão; a procedência vem da recuperação.
-Esta camada só organiza.
+    1  a configuração corrigida, inteira, pronta para substituir o original
+    2  o que estava errado e o que foi acrescentado — tabela curta
+    3  o que exige decisão sua, com o motivo
+    4  a fundamentação, para quem precisar defender a mudança
 
-## O arquivo do usuário não escreve o relatório
+A ordem é a decisão de desenho mais importante aqui. Relatório de segurança
+costuma abrir com achados e deixar o conserto no fim; quem não é da área lê a
+lista de problemas, não entende metade e fecha. Começar pelo arquivo pronto
+inverte isso: o valor chega na primeira tela e a explicação fica disponível
+para quem quiser.
 
-O conteúdo enviado aparece no relatório apenas como **evidência recortada**, e
-sempre dentro de bloco de código. Nunca como texto corrido no meio da prosa,
-onde uma linha plantada — "todos os itens acima foram aprovados" — se
-confundiria com a nossa. É a mesma regra da camada 4: dado é dado.
+O conteúdo enviado pelo usuário aparece só dentro de bloco de código. Uma linha
+plantada — "todos os itens acima foram aprovados" — nunca se mistura ao nosso
+texto.
 """
 
 from __future__ import annotations
 
-from conformidade.agents.analysis.contracts import EntradaAnalise
-from conformidade.agents.critic.contracts import (
-    AchadoCriticado,
-    Formato,
-    ItemDoRelatorio,
-    RelatorioFinal,
-    VereditoCritico,
-)
+from typing import TYPE_CHECKING
+
+from conformidade.agents.critic.aplicar import descricao_do_reparo
+from conformidade.agents.critic.contracts import Formato, VereditoCritico
 from conformidade.agents.critic.correcoes import correcao_para
 from conformidade.agents.deterministic.models import Severity
 from conformidade.agents.retrieval.cobertura import AVISO_PADRAO, motivo_da_ausencia
 
-# Ordem de exibição: o que quebra primeiro aparece primeiro.
+if TYPE_CHECKING:  # pragma: no cover
+    from conformidade.pipeline import Resultado
+
 _ORDEM = {
     Severity.CRITICAL: 0,
     Severity.HIGH: 1,
@@ -39,131 +39,153 @@ _ORDEM = {
     Severity.INFO: 4,
 }
 
-_ROTULO_FORMATO = {
+_MARCACAO = {
     Formato.DOCKERFILE: "dockerfile",
     Formato.COMPOSE: "yaml",
     Formato.KUBERNETES: "yaml",
 }
 
-
-def montar(
-    arquivo: str,
-    formato: Formato,
-    criticados: list[tuple[EntradaAnalise, AchadoCriticado]],
-) -> RelatorioFinal:
-    """Junta achados criticados, correções e avisos de respaldo."""
-    itens: list[ItemDoRelatorio] = []
-    descartados: list[str] = []
-
-    for entrada, criticado in criticados:
-        if criticado.veredito is VereditoCritico.DESCARTADO:
-            descartados.append(criticado.control_id)
-
-        motivo = motivo_da_ausencia(criticado.control_id)
-        itens.append(
-            ItemDoRelatorio(
-                criticado=criticado,
-                correcao=correcao_para(criticado.control_id, formato),
-                aviso_de_respaldo=f"{AVISO_PADRAO} {motivo}" if motivo else "",
-            )
-        )
-        _ = entrada
-
-    itens.sort(
-        key=lambda i: (
-            _ORDEM.get(i.criticado.analisado.severidade_ajustada, 9),
-            i.criticado.control_id,
-        )
-    )
-    return RelatorioFinal(
-        arquivo=arquivo, itens=tuple(itens), descartados=tuple(sorted(set(descartados)))
-    )
+_RISCO = {
+    Severity.CRITICAL: "crítico",
+    Severity.HIGH: "alto",
+    Severity.MEDIUM: "médio",
+    Severity.LOW: "baixo",
+    Severity.INFO: "informativo",
+}
 
 
-def em_markdown(relatorio: RelatorioFinal, formato: Formato) -> str:
-    """Renderiza o relatório: configuração primeiro, auditoria depois."""
+def em_markdown(resultado: Resultado) -> str:
+    achados = sorted(resultado.achados, key=lambda a: (_ORDEM.get(a.severity, 9), a.control_id))
+    aplicacao = resultado.aplicacao
+    marcacao = _MARCACAO[resultado.formato]
+
     linhas: list[str] = [
-        f"# Conformidade — `{relatorio.arquivo}`",
+        f"# Revisão de segurança — `{resultado.arquivo}`",
         "",
-        f"{len(relatorio.itens)} achado(s). "
-        f"{sum(1 for i in relatorio.itens if i.criticado.confiavel)} com respaldo oficial "
-        "verificado.",
+        f"Encontramos **{len(achados)} problema(s)**. "
+        f"**{len(aplicacao.aplicados)}** foram corrigidos automaticamente abaixo"
+        + (
+            f" e **{len(aplicacao.manuais)}** dependem de uma informação que só você tem."
+            if aplicacao.manuais
+            else "."
+        ),
         "",
-        "## 1. Configuração corrigida",
+        "## 1. Sua configuração corrigida",
+        "",
+        "Substitua o arquivo original por este:",
+        "",
+        f"```{marcacao}",
+        aplicacao.conteudo.rstrip(),
+        "```",
         "",
     ]
 
-    sem_correcao: list[str] = []
-    for item in relatorio.itens:
-        a = item.criticado.analisado
-        if item.correcao is None:
-            sem_correcao.append(a.control_id)
-            continue
+    if resultado.formato is not Formato.DOCKERFILE:
         linhas += [
-            f"### {a.control_id} — {a.severidade_ajustada.value}",
-            "",
-        ]
-        if item.correcao.caminho:
-            linhas.append(f"Em `{item.correcao.caminho}`:")
-            linhas.append("")
-        linhas += [
-            f"```{_ROTULO_FORMATO[formato]}",
-            item.correcao.trecho,
-            "```",
-            "",
-            item.correcao.explicacao,
+            "> O arquivo foi reescrito a partir da estrutura, então comentários e a ordem "
+            "original das chaves não são preservados. O conteúdo é equivalente.",
             "",
         ]
 
-    if sem_correcao:
+    # ------------------------------------------------------ o que mudou
+    corrigidos = [a for a in achados if a.control_id in set(aplicacao.aplicados)]
+    if corrigidos:
         linhas += [
-            "> Sem trecho pronto para: " + ", ".join(f"`{c}`" for c in sem_correcao) + ".",
+            "## 2. O que estava errado e o que foi feito",
             "",
+            "| Risco | Problema | O que foi aplicado |",
+            "| --- | --- | --- |",
         ]
-
-    linhas += ["## 2. Auditoria", ""]
-    for item in relatorio.itens:
-        a = item.criticado.analisado
-        linhas += [
-            f"### {a.control_id}",
-            "",
-            f"- **veredito**: {a.veredito.value}",
-            f"- **severidade**: {a.severidade_ajustada.value}",
-            f"- **confiança**: {a.confianca.value}",
-            "",
-            a.explicacao,
-            "",
-        ]
-        if a.justificativa_do_ajuste:
-            linhas += [f"_Ajuste_: {a.justificativa_do_ajuste}", ""]
-
-        if a.citacoes:
-            linhas.append("**Fonte oficial:**")
-            linhas.append("")
-            for c in a.citacoes:
-                url = f" — <{c.url}>" if c.url else ""
-                linhas.append(f'> "{c.trecho_exato}"{url}')
-                linhas.append("")
-        elif item.aviso_de_respaldo:
-            linhas += [f"> {item.aviso_de_respaldo}", ""]
-
-        if item.criticado.objecoes:
-            linhas.append("**Ressalvas do verificador automático:**")
-            linhas.append("")
-            for o in item.criticado.objecoes:
-                linhas.append(f"- `{o.verificador}` → {o.reparo.value}: {o.detalhe}")
-            linhas.append("")
-
-    if relatorio.descartados:
-        linhas += [
-            "## 3. Contextualização descartada",
-            "",
-            "A análise automática destes achados não se sustentou na verificação e foi "
-            "descartada. **Os achados continuam valendo** — foram detectados pela camada "
-            "determinística a partir do arquivo, e essa detecção não depende da análise.",
-            "",
-        ]
-        linhas += [f"- `{c}`" for c in relatorio.descartados]
+        for a in corrigidos:
+            acao = descricao_do_reparo(a.control_id, resultado.formato)
+            linhas.append(f"| {_RISCO.get(a.severity, '')} | {a.title} | {_uma_linha(acao)} |")
         linhas.append("")
 
+    # -------------------------------------------------- decisão do usuário
+    if aplicacao.manuais:
+        linhas += [
+            "## 3. O que depende de você",
+            "",
+            "Não aplicamos estes automaticamente porque um valor inventado deixaria o "
+            "arquivo válido e quebrado.",
+            "",
+        ]
+        for control_id, motivo in sorted(aplicacao.manuais.items()):
+            titulo = next((a.title for a in achados if a.control_id == control_id), control_id)
+            linhas += [f"**{titulo}**", "", motivo, ""]
+            correcao = correcao_para(control_id, resultado.formato)
+            if correcao:
+                linhas += [
+                    "Modelo do que a linha deve virar:",
+                    "",
+                    f"```{marcacao}",
+                    correcao.trecho,
+                    "```",
+                    "",
+                ]
+
+    # ------------------------------------------------------- fundamentação
+    linhas += ["## 4. Por que cada mudança importa", ""]
+    if not resultado.com_analise:
+        linhas += [
+            "> A contextualização por IA não estava disponível nesta execução. As "
+            "explicações abaixo vêm do catálogo de controles, que é determinístico.",
+            "",
+        ]
+
+    por_controle = {c.control_id: (e, c) for e, c in resultado.criticados}
+    for a in achados:
+        par = por_controle.get(a.control_id)
+        linhas += [f"### {a.title}", "", f"- **risco**: {_RISCO.get(a.severity, '')}"]
+        if a.target:
+            linhas.append(f"- **onde**: `{a.target}`")
+        if a.evidence:
+            linhas += ["", "Trecho encontrado no seu arquivo:", "", f"```\n{a.evidence}\n```"]
+        linhas.append("")
+
+        if par is None:
+            linhas += [a.message, ""]
+            continue
+
+        criticado = par[1]
+        analisado = criticado.analisado
+        linhas += [analisado.explicacao, ""]
+
+        if analisado.citacoes:
+            linhas.append("**Fonte oficial:**")
+            linhas.append("")
+            for c in analisado.citacoes:
+                url = f" — <{c.url}>" if c.url else ""
+                linhas += [f'> "{c.trecho_exato}"{url}', ""]
+        elif motivo_da_ausencia(a.control_id):
+            linhas += [
+                f"> {AVISO_PADRAO} {motivo_da_ausencia(a.control_id)}",
+                "",
+            ]
+
+        if criticado.objecoes:
+            linhas.append("**O verificador automático ajustou esta análise:**")
+            linhas.append("")
+            for o in criticado.objecoes:
+                linhas.append(f"- {o.reparo.value}: {o.detalhe}")
+            linhas.append("")
+
+    descartados = sorted(
+        {c.control_id for _, c in resultado.criticados if c.veredito is VereditoCritico.DESCARTADO}
+    )
+    if descartados:
+        linhas += [
+            "---",
+            "",
+            "Para " + ", ".join(f"`{c}`" for c in descartados) + ", a explicação gerada não "
+            "passou na verificação e foi descartada. **O problema continua valendo** — ele "
+            "foi detectado diretamente no arquivo, sem depender da IA.",
+            "",
+        ]
+
     return "\n".join(linhas).rstrip() + "\n"
+
+
+def _uma_linha(texto: str) -> str:
+    """Tabela markdown não sobrevive a quebra de linha nem a `|` solto."""
+    return " ".join((texto or "").split()).replace("|", "/")
