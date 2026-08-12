@@ -26,6 +26,18 @@ licencas:
     observacao: Obra do governo dos EUA, sem restrição de uso
     citacao_permitida: true
     exige_atribuicao: false
+  CC-BY-NC-SA-4.0:
+    fonte: https://creativecommons.org/licenses/by-nc-sa/4.0/
+    citacao_permitida: true
+    exige_atribuicao: true
+    # Uso NÃO COMERCIAL apenas. Este projeto é didático e de portfólio, o que
+    # a licença cobre. Se a finalidade mudar, a fonte sai do corpus e os
+    # controles que dependem dela voltam a `cobertura.SEM_RESPALDO_OFICIAL`.
+    somente_nao_comercial: true
+    atribuicao: >-
+      Center for Internet Security, CIS Docker Benchmark v1.8.0, sob
+      CC BY-NC-SA 4.0. O documento não é redistribuído: o PDF fica fora do
+      repositório e apenas o texto extraído é indexado.
 
 # Fontes deliberadamente NÃO ingeridas, e por quê.
 excluidas:
@@ -299,3 +311,42 @@ paginas:
     controles: [CONF-WLD-001, CONF-WLD-002, CONF-WLD-003, CONF-WLD-004,
                 CONF-WLD-005, CONF-WLD-007, CONF-SEC-001, CONF-IMG-002,
                 CONF-IMG-003]
+
+  # CIS Docker Benchmark v1.8.0 — única fonte oficial do corpus escrita como
+  # ESPECIFICAÇÃO DE CONFIGURAÇÃO. Só as seções 4 e 5 (44 das 114): as demais
+  # tratam de host, daemon e Swarm, que não aparecem na entrada do sistema.
+  # `arquivo` porque o PDF fica atrás de formulário; a `url` é referência de
+  # citação. A lista de controles deriva de `agents/retrieval/cis.py`.
+  - id: cis:docker-benchmark
+    url: https://www.cisecurity.org/benchmark/docker
+    arquivo: CIS_Docker_Benchmark_v1.8.0.pdf
+    fonte: cis
+    licenca: CC-BY-NC-SA-4.0
+    camada: 1
+    formato: cis
+    controles:
+      - CONF-CMP-001
+      - CONF-CMP-002
+      - CONF-DKR-001
+      - CONF-DKR-002
+      - CONF-DKR-003
+      - CONF-DKR-005
+      - CONF-DKR-006
+      - CONF-DKR-010
+      - CONF-DKR-012
+      - CONF-DKR-014
+      - CONF-IMG-001
+      - CONF-IMG-002
+      - CONF-K8S-001
+      - CONF-K8S-002
+      - CONF-SEC-001
+      - CONF-WLD-001
+      - CONF-WLD-002
+      - CONF-WLD-003
+      - CONF-WLD-004
+      - CONF-WLD-005
+      - CONF-WLD-006
+      - CONF-WLD-007
+      - CONF-WLD-008
+      - CONF-WLD-009
+      - CONF-WLD-010

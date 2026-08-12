@@ -1,8 +1,8 @@
 {
- "controles_com_distrator": 5,
- "mrr": 0.8912,
- "ndcg_at_10": 0.8065,
- "precision_at_5": 0.4944,
- "recall_at_10": 0.9356,
- "recall_at_5": 0.766
+ "controles_com_distrator": 4,
+ "mrr": 0.9352,
+ "ndcg_at_10": 0.8307,
+ "precision_at_5": 0.5611,
+ "recall_at_10": 0.9182,
+ "recall_at_5": 0.7179
 }

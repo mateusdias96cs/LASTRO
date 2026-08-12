@@ -53,18 +53,18 @@ limiares:
 casos:
   # -------------------------------------------------------------- Dockerfile
   CONF-DKR-001:
-    alta: [dkr:dockerfile-reference, k8s:security-context]
+    alta: [dkr:dockerfile-reference, k8s:security-context, cis:docker-benchmark]
     apoio: [dkr:rootless, k8s:pod-security-standards, k8s:linux-kernel-security,
             nist:sp-800-190]
     nao_deve: [k8s:namespaces, k8s:service]
 
   CONF-DKR-002:
-    alta: [dkr:dockerfile-reference]
+    alta: [dkr:dockerfile-reference, cis:docker-benchmark]
     apoio: [dkr:compose-services, k8s:probes]
     nao_deve: [k8s:secrets, dkr:bind-mounts]
 
   CONF-DKR-003:
-    alta: [dkr:dockerfile-reference, dkr:best-practices]
+    alta: [dkr:dockerfile-reference, dkr:best-practices, cis:docker-benchmark]
     nao_deve: [k8s:volumes, k8s:service]
 
   CONF-DKR-004:
@@ -74,7 +74,7 @@ casos:
     nota: Cobertura fina. ADD remoto é tratado na referência, sem página dedicada.
 
   CONF-DKR-005:
-    alta: [dkr:best-practices]
+    alta: [dkr:best-practices, cis:docker-benchmark]
     apoio: [dkr:dockerfile-reference]
     nao_deve: [k8s:seccomp]
     nota: >-
@@ -82,7 +82,7 @@ casos:
       clássico de busca lexical — por isso está listado explicitamente.
 
   CONF-DKR-006:
-    alta: [nist:sp-800-190, dkr:dockerfile-reference]
+    alta: [nist:sp-800-190, dkr:dockerfile-reference, cis:docker-benchmark]
     apoio: [dkr:best-practices]
     nao_deve: [k8s:images]
     nota: >-
@@ -107,7 +107,7 @@ casos:
     nota: Uma página só. Candidato a ampliar o corpus se o recall cair.
 
   CONF-DKR-010:
-    alta: [dkr:best-practices]
+    alta: [dkr:best-practices, cis:docker-benchmark]
     apoio: [dkr:dockerfile-reference]
     nao_deve: [k8s:manage-resources]
 
@@ -117,7 +117,7 @@ casos:
     nao_deve: [k8s:volumes]
 
   CONF-DKR-012:
-    alta: [dkr:dockerfile-reference]
+    alta: [dkr:dockerfile-reference, cis:docker-benchmark]
     apoio: [dkr:cli-container-run, dkr:engine-security]
     nao_deve: [k8s:service, dkr:network]
     nota: >-
@@ -130,7 +130,7 @@ casos:
     nao_deve: [k8s:probes]
 
   CONF-DKR-014:
-    alta: [dkr:build-secrets, dkr:dockerfile-reference]
+    alta: [dkr:build-secrets, dkr:dockerfile-reference, cis:docker-benchmark]
     apoio: [k8s:secrets, dkr:best-practices, nist:sp-800-190]
     nao_deve: [k8s:rbac]
 
@@ -140,12 +140,12 @@ casos:
 
   # ------------------------------------------------- procedência da imagem
   CONF-IMG-001:
-    alta: [k8s:images]
+    alta: [k8s:images, cis:docker-benchmark]
     apoio: [dkr:best-practices]
     nao_deve: [k8s:secrets, dkr:bind-mounts]
 
   CONF-IMG-002:
-    alta: [k8s:images]
+    alta: [k8s:images, cis:docker-benchmark]
     apoio: [dkr:best-practices, nist:sp-800-190]
     nao_deve: [k8s:secrets, dkr:bind-mounts]
     nota: >-
@@ -160,25 +160,25 @@ casos:
 
   # ------------------------------ postura de runtime (Compose + Kubernetes)
   CONF-WLD-001:
-    alta: [k8s:pod-security-standards, dkr:container-run]
+    alta: [k8s:pod-security-standards, dkr:container-run, cis:docker-benchmark]
     apoio: [k8s:linux-kernel-security, dkr:engine-security, nist:sp-800-190,
             k8s:security-checklist]
     nao_deve: [k8s:namespaces, dkr:compose-build]
 
   CONF-WLD-002:
-    alta: [dkr:engine-security, dkr:rootless]
+    alta: [dkr:engine-security, dkr:rootless, cis:docker-benchmark]
     apoio: [k8s:volumes]
     nao_deve: [k8s:service, dkr:network]
     nota: >-
       NIST removido do apoio na revisão 2: zero menção a socket do Docker.
 
   CONF-WLD-003:
-    alta: [dkr:bind-mounts, k8s:volumes]
+    alta: [dkr:bind-mounts, k8s:volumes, cis:docker-benchmark]
     apoio: [dkr:container-run, nist:sp-800-190]
     nao_deve: [k8s:secrets]
 
   CONF-WLD-004:
-    alta: [k8s:pod-security-standards, dkr:compose-services]
+    alta: [k8s:pod-security-standards, dkr:compose-services, cis:docker-benchmark]
     apoio: [dkr:network, k8s:security-checklist, nist:sp-800-190, k8s:pods]
     nao_deve: [k8s:service]
     nota: >-
@@ -186,19 +186,19 @@ casos:
       perigoso: fala de rede o tempo todo sem tratar de hostNetwork.
 
   CONF-WLD-005:
-    alta: [dkr:seccomp, k8s:security-context, k8s:linux-kernel-security]
+    alta: [dkr:seccomp, k8s:security-context, k8s:linux-kernel-security, cis:docker-benchmark]
     apoio: [dkr:compose-services, dkr:container-run, dkr:apparmor, k8s:apparmor,
             nist:sp-800-190]
     nao_deve: [k8s:rbac]
 
   CONF-WLD-006:
-    alta: [k8s:security-context, dkr:container-run]
+    alta: [k8s:security-context, dkr:container-run, cis:docker-benchmark]
     apoio: [dkr:compose-services, dkr:cli-container-run, k8s:pod-security-standards,
             nist:sp-800-190]
     nao_deve: [k8s:volumes]
 
   CONF-WLD-007:
-    alta: [k8s:security-context, k8s:pod-security-standards]
+    alta: [k8s:security-context, k8s:pod-security-standards, cis:docker-benchmark]
     apoio: [dkr:rootless, k8s:linux-kernel-security, k8s:security-checklist]
     nao_deve: [k8s:rbac, k8s:service-accounts]
     nota: >-
@@ -206,7 +206,7 @@ casos:
       distrator natural de "roda como root".
 
   CONF-WLD-008:
-    alta: [k8s:security-context, dkr:compose-services]
+    alta: [k8s:security-context, dkr:compose-services, cis:docker-benchmark]
     apoio: [dkr:cli-container-run, k8s:pod-security-standards, nist:sp-800-190]
     nao_deve: [dkr:bind-mounts, k8s:volumes]
     nota: >-
@@ -214,17 +214,17 @@ casos:
       versus volume montado somente-leitura. Conceitos distintos.
 
   CONF-WLD-009:
-    alta: [k8s:manage-resources]
+    alta: [k8s:manage-resources, cis:docker-benchmark]
     apoio: [dkr:compose-deploy, dkr:container-run, k8s:pods]
     nao_deve: [k8s:rbac, k8s:namespaces]
 
   CONF-WLD-010:
-    alta: [k8s:probes, dkr:dockerfile-reference]
+    alta: [k8s:probes, dkr:dockerfile-reference, cis:docker-benchmark]
     apoio: [dkr:compose-services]
     nao_deve: [k8s:security-checklist]
 
   CONF-SEC-001:
-    alta: [k8s:secrets, dkr:compose-services]
+    alta: [k8s:secrets, dkr:compose-services, cis:docker-benchmark]
     apoio: [nist:sp-800-190, k8s:volumes]
     nao_deve: [dkr:build-secrets, dkr:compose-build]
     nota: >-
@@ -235,7 +235,7 @@ casos:
 
   # ----------------------------------------------------------------- Compose
   CONF-CMP-001:
-    alta: [dkr:compose-services]
+    alta: [dkr:compose-services, cis:docker-benchmark]
     apoio: [dkr:cli-container-run, k8s:pod-security-standards]
     nao_deve: [k8s:rbac]
     nota: >-
@@ -243,19 +243,19 @@ casos:
       allowPrivilegeEscalation (Kubernetes). Mesmo conceito, sintaxes distintas.
 
   CONF-CMP-002:
-    alta: [dkr:compose-services, dkr:network]
+    alta: [dkr:compose-services, dkr:network, cis:docker-benchmark]
     apoio: [dkr:cli-container-run]
     nao_deve: [k8s:service, k8s:pod-security-standards]
 
   # ------------------------------------------------------------- Kubernetes
   CONF-K8S-001:
-    alta: [k8s:security-context, k8s:pod-security-standards]
+    alta: [k8s:security-context, k8s:pod-security-standards, cis:docker-benchmark]
     apoio: [k8s:linux-kernel-security]
     nao_deve: [dkr:compose-services]
     nota: Distrator ao contrário do CONF-CMP-001.
 
   CONF-K8S-002:
-    alta: [k8s:seccomp, k8s:security-context]
+    alta: [k8s:seccomp, k8s:security-context, cis:docker-benchmark]
     apoio: [k8s:pod-security-standards, dkr:seccomp, k8s:linux-kernel-security]
     nao_deve: [k8s:apparmor, dkr:apparmor]
     nota: "Par confundível: seccomp (syscalls) versus AppArmor (MAC de arquivos)."

@@ -509,9 +509,9 @@ casos:
       nao_citar_paginas: [dkr:build-secrets, dkr:compose-build]
       nao_deve_mencionar: ["mount=type=secret"]
 
-  - id: N5-hostport-versus-hostnetwork
-    nivel: 5
-    descricao: hostPort × hostNetwork — nomes vizinhos, riscos diferentes
+  - id: N1-hostport-direto
+    nivel: 1
+    descricao: hostPort num Deployment comum — sem par confundível
     achado:
       control_id: CONF-K8S-005
       severidade: medium
@@ -520,20 +520,19 @@ casos:
       linha: 35
       evidencia: "hostPort: 8080"
       mensagem: Container mapeia hostPort no nó.
-    # "3 réplicas" é agravante específico de hostPort — réplicas disputam a
-    # mesma porta do nó. O modelo respondeu `agravado_por_contexto` por causa
-    # disso, corretamente. O caso mede confusão hostPort × hostNetwork, então
-    # o contexto não deve carregar outro sinal.
+    # Era `N5-hostport-versus-hostnetwork`, caso de par confundível. Deixou de
+    # ser: com o CIS Docker Benchmark no corpus, a 5.9 e a 5.14 ocupam o topo
+    # para este controle e o distrator `dkr:compose-services` saiu do top-6.
+    # Medido, não suposto — dos 5 casos de nível 5, este foi o único cujo
+    # distrator desapareceu. Sem par confundível, o caso é direto, e nível 5
+    # que não confunde mede outra coisa que o nome promete.
     contexto: Aplicação web comum.
     recuperacao: real
     esperado:
       veredito: [confirmado]
-      # exige_citacao removido: nenhum dos 6 trechos entregues para
-      # CONF-K8S-005 trata de hostPort. O único chunk do corpus que menciona
-      # o termo (`k8s:pod-security-standards#0004`) está na posição 14 da
-      # busca híbrida. Recusar-se a citar é a regra 5 do prompt funcionando;
-      # exigir citação aqui mediria a camada 2 através da camada 3.
-      nao_citar_paginas: [dkr:compose-services]
+      # `exige_citacao` continua fora: o único chunk do corpus que documenta
+      # `hostPort` (`k8s:pod-security-standards#0004`) ainda não chega ao
+      # top-6, e exigir citação aqui mediria a camada 2 através da camada 3.
 
   - id: N5-namespace-versus-rbac
     nivel: 5

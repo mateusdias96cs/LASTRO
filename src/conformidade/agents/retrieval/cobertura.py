@@ -30,17 +30,18 @@ este controle. As duas causas medidas são distintas:
 Quando um desses controles passar a receber trecho normativo, a auditoria
 acusa e a entrada sai daqui. O teste em `tests/test_cobertura.py` impede que a
 lista e a medição divirjam em silêncio.
+
+Foi exatamente o que aconteceu com a entrada do CIS Docker Benchmark no corpus:
+`CONF-DKR-006` (4.7, "update instructions are not used alone in Dockerfiles")
+passou a receber trecho normativo na **primeira** posição, e `CONF-WLD-005`
+(5.4, "Linux kernel capabilities are restricted within containers") na sexta.
+Os dois saíram desta lista por medição, não por decisão.
 """
 
 from __future__ import annotations
 
 # control_id → por que não há respaldo entregue, em linguagem de relatório.
 SEM_RESPALDO_OFICIAL: dict[str, str] = {
-    "CONF-DKR-006": (
-        "A documentação oficial da Docker menciona `apt-get upgrade` apenas em "
-        "texto sobre invalidação de cache de build, não como recomendação de "
-        "segurança."
-    ),
     "CONF-DKR-011": (
         "Não há, na documentação oficial indexada, enunciado normativo sobre "
         "restringir o contexto de build enviado à imagem."
@@ -48,10 +49,6 @@ SEM_RESPALDO_OFICIAL: dict[str, str] = {
     "CONF-IMG-002": (
         "A documentação oficial descreve o comportamento de tags mutáveis, mas "
         "não enuncia norma sobre quais tags evitar."
-    ),
-    "CONF-WLD-005": (
-        "A documentação oficial lista as capabilities do Linux e o que cada uma "
-        "faz, sem enunciar quais devem ser negadas."
     ),
     "CONF-WLD-008": (
         "`readOnlyRootFilesystem` aparece na documentação oficial apenas em "

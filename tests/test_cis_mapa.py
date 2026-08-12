@@ -123,14 +123,37 @@ def test_titulos_batem_literalmente():
     assert not divergentes, f"título divergente entre mapa e PDF: {divergentes}"
 
 
-@precisa_do_pdf
-def test_controles_sem_respaldo_ganham_cobertura():
-    """O motivo de o CIS entrar no corpus. Se um destes deixar de estar
-    mapeado, a expectativa mudou e alguém precisa saber."""
+GANHARAM_RESPALDO = {"CONF-DKR-006", "CONF-WLD-005"}
+
+
+def test_o_cis_mapeia_quem_ganhou_respaldo():
+    """Registra o motivo de o CIS entrar no corpus.
+
+    Antes da ativação, estes dois declaravam falta de respaldo oficial. Com o
+    CIS indexado, a auditoria passou a entregar trecho normativo para os dois —
+    `CONF-DKR-006` pela recomendação 4.7 na primeira posição, `CONF-WLD-005`
+    pela 5.4 na sexta. Se o mapeamento sumir, a causa do ganho sumiu junto.
+    """
+    assert GANHARAM_RESPALDO <= MAPA.controles_cobertos()
+
+
+def test_quem_ganhou_respaldo_saiu_da_lista_de_ausencia():
+    """Impede a regressão silenciosa oposta: o controle voltar a declarar
+    ausência de respaldo enquanto a fonte continua no corpus."""
     from conformidade.agents.retrieval.cobertura import SEM_RESPALDO_OFICIAL
 
-    cobertos = MAPA.controles_cobertos() & set(SEM_RESPALDO_OFICIAL)
-    assert {"CONF-DKR-006", "CONF-WLD-005", "CONF-WLD-008", "CONF-WLD-009"} <= cobertos
+    assert not (GANHARAM_RESPALDO & set(SEM_RESPALDO_OFICIAL))
+
+
+def test_quem_ainda_declara_ausencia_nao_e_promessa_vazia():
+    """Controle que segue sem respaldo e ESTÁ mapeado no CIS é sinal de que a
+    fonte existe e a busca não a entrega — situação real de `CONF-WLD-008` e
+    `CONF-WLD-009`, e que a auditoria detalha. O que não pode existir é
+    controle sem respaldo cuja causa ninguém saiba nomear."""
+    from conformidade.agents.retrieval.cobertura import SEM_RESPALDO_OFICIAL
+
+    for control_id, motivo in SEM_RESPALDO_OFICIAL.items():
+        assert motivo.strip(), control_id
 
 
 # --------------------------------------------- correspondência com o gabarito
