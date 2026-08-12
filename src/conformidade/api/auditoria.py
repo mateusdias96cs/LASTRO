@@ -17,7 +17,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
-from conformidade.pipeline import auditar
+from conformidade.pipeline import auditar, diagnostico
 
 router = APIRouter(prefix="/api/v1", tags=["auditoria"])
 
@@ -196,3 +196,16 @@ async def post_configuracao(file: Annotated[UploadFile, File()]) -> str:
     """
     texto, nome = await _ler(file)
     return _executar(texto, nome, "").aplicacao.conteudo
+
+
+@router.get("/diagnostico")
+def get_diagnostico() -> dict[str, object]:
+    """Estado das camadas: por que veio (ou não veio) explicação de IA.
+
+    Existe porque descobrir isso custou uma sessão inteira: a mensagem ao
+    usuário dizia "não configurada" enquanto a configuração estava correta, e
+    a investigação foi para o recurso errado. Uma chamada aqui responde.
+
+    Informa presença, nunca valor — endpoint e client id não aparecem.
+    """
+    return diagnostico()

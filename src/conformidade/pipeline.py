@@ -30,6 +30,7 @@ código.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -44,6 +45,8 @@ from conformidade.agents.critic import criticar
 from conformidade.agents.critic.aplicar import Aplicacao, aplicar
 from conformidade.agents.critic.contracts import AchadoCriticado, Formato
 from conformidade.agents.deterministic import ArtifactKind, Finding, analyze
+
+_log = logging.getLogger("conformidade.pipeline")
 
 # Quantos trechos a camada 3 recebe. Medido: subir para 10 ganha um controle
 # com respaldo e quase triplica a exposição a distratores.
@@ -174,6 +177,18 @@ def auditar(
                 # Degradação por achado, não por requisição: o limite de
                 # requisições por minuto do deployment derruba os últimos de um
                 # arquivo grande, e os primeiros continuam valendo.
+                #
+                # O log traz a exceção inteira; o usuário recebe só a primeira,
+                # resumida. Sem isto, um erro de permissão em produção chega
+                # como "sem explicação" e não há como saber de quê.
+                _log.warning(
+                    "camada 3 falhou neste achado",
+                    extra={
+                        "control_id": achado.control_id,
+                        "erro": type(exc).__name__,
+                        "detalhe": str(exc),
+                    },
+                )
                 saida = _sem_analise(achado)
                 motivo = motivo or f"{type(exc).__name__}: {exc}"
         criticados.append((entrada, criticar(entrada, saida)))
@@ -246,20 +261,82 @@ def _recuperador_padrao():
 
 @lru_cache(maxsize=1)
 def _analisador_ou_motivo():
-    """Cliente do Azure, ou o motivo de não haver um.
+    """Cliente do Azure, ou o motivo — específico — de não haver um.
 
-    Em cache porque construir envolve resolver credencial gerenciada, o que
-    custa uma ida à rede e não muda entre requisições.
+    Em cache porque construir lê configuração e não muda entre requisições.
+
+    ## Por que cada categoria tem mensagem própria
+
+    A versão anterior capturava tudo e dizia "camada de IA não configurada".
+    Isso custou uma sessão inteira de investigação no recurso errado: a
+    mensagem afirmava falta de configuração, e a configuração estava correta.
+    Mensagem de erro que descreve a causa errada é pior que mensagem genérica,
+    porque direciona a busca para longe do problema.
+
+    Note que o construtor **não toca a rede**: ele só lê configuração. Falha de
+    credencial ou de permissão acontece na primeira análise, não aqui, e é
+    reportada pelo laço em `auditar`.
     """
     from conformidade.agents.analysis.azure_provider import AnalisadorAzureOpenAI
 
     try:
         return AnalisadorAzureOpenAI(), ""
     except ValueError as exc:
-        # Falta de configuração é estado esperado em desenvolvimento local, não
-        # erro: o arquivo corrigido não depende da camada 3.
-        return None, f"camada de IA não configurada ({exc})"
+        # Estado esperado em desenvolvimento local, não erro.
+        _log.info(
+            "camada 3 desativada: configuração ausente",
+            extra={"erro": type(exc).__name__, "detalhe": str(exc)},
+        )
+        return None, f"AZURE_OPENAI_ENDPOINT ou AZURE_OPENAI_DEPLOYMENT ausente ({exc})"
+    except ImportError as exc:
+        _log.error(
+            "camada 3 indisponível: dependência ausente na imagem",
+            extra={"erro": type(exc).__name__, "detalhe": str(exc)},
+        )
+        return None, f"dependência ausente na imagem: {exc}"
+    except Exception as exc:  # noqa: BLE001 - a camada 3 nunca derruba a auditoria
+        _log.exception(
+            "camada 3 indisponível: falha inesperada ao montar o analisador",
+            extra={"erro": type(exc).__name__, "detalhe": str(exc)},
+        )
+        return None, f"falha ao montar a camada de IA — {type(exc).__name__}: {exc}"
 
 
 def _analisador_padrao():
     return _analisador_ou_motivo()
+
+
+def diagnostico() -> dict[str, object]:
+    """Estado das camadas, para responder "por que não veio explicação?" numa
+    chamada em vez de numa sessão de investigação.
+
+    Não expõe segredo: informa se cada peça está de pé e, quando não está, por
+    quê. O endpoint que serve isto é `GET /api/v1/diagnostico`.
+    """
+    from conformidade.config import get_settings
+
+    settings = get_settings()
+    recuperador, falha_busca = _recuperador_padrao()
+    analisador, falha_ia = _analisador_padrao()
+
+    # Só aqui a credencial é exercitada de verdade. É o único jeito de separar
+    # "configurado" de "funciona": o construtor não fala com o Azure.
+    token = "não testado"
+    if analisador is not None:
+        try:
+            analisador._obter_cliente()
+            token = "ok"
+        except Exception as exc:  # noqa: BLE001 - diagnóstico não pode falhar
+            token = f"{type(exc).__name__}: {exc}"
+
+    return {
+        "camada_2_busca": "ok" if recuperador else falha_busca,
+        "camada_3_configurada": analisador is not None,
+        "camada_3_motivo": falha_ia,
+        "camada_3_credencial": token,
+        # Presença, nunca valor.
+        "endpoint_definido": bool(settings.azure_openai_endpoint),
+        "deployment_definido": bool(settings.azure_openai_deployment),
+        "client_id_definido": bool(settings.azure_client_id),
+        "corpus_dir": settings.corpus_dir,
+    }

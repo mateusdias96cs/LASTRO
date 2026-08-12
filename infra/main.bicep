@@ -26,6 +26,7 @@ param azureOpenAiEndpoint string = ''
 param azureOpenAiDeployment string = ''
 
 @description('ID completo do recurso Azure OpenAI, para conceder acesso por identidade gerenciada.')
+@description('Resource id do Azure OpenAI. Vazio pula a atribuição de papel — e a aplicação sobe sem conseguir chamar o modelo.')
 param azureOpenAiResourceId string = ''
 
 @description('Tag da imagem a implantar. O pipeline passa o SHA do commit.')
@@ -78,3 +79,9 @@ output AZURE_CONTAINER_REGISTRY_NAME string = recursos.outputs.registryName
 output AZURE_KEY_VAULT_NAME string = recursos.outputs.keyVaultName
 output SERVICE_API_URI string = recursos.outputs.apiUri
 output AZURE_CLIENT_ID string = recursos.outputs.identidadeClientId
+
+// Torna visível, no fim do deploy, se a aplicação vai conseguir chamar o
+// modelo. A atribuição de papel é condicional a `azureOpenAiResourceId`, e a
+// condição some sem erro quando o parâmetro vem vazio — o deploy termina com
+// sucesso e a camada 3 falha em runtime, longe da causa.
+output PAPEL_OPENAI_ATRIBUIDO bool = !empty(azureOpenAiResourceId)
