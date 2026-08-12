@@ -41,6 +41,24 @@ class Settings(BaseSettings):
     # Cache das respostas da camada 3, com chave derivada do conteúdo.
     analise_cache_dir: str = ".cache-analise"
 
+    # Origens autorizadas a chamar a API pelo navegador, separadas por vírgula.
+    #
+    # Sem isto o frontend não funciona, e falha do jeito mais confuso possível:
+    # o navegador bloqueia a resposta e o erro chega como falha de rede
+    # genérica, não como "CORS negou". O backend precisa dizer explicitamente
+    # de quais origens aceita chamada.
+    #
+    # Vazio libera `localhost` para desenvolvimento e nada mais — produção
+    # precisa declarar a origem do Container App do frontend.
+    cors_origins: str = ""
+
+    @property
+    def origens_permitidas(self) -> list[str]:
+        declaradas = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        if declaradas:
+            return declaradas
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+
     # Preenchidos na migração para Azure. Vazios = recursos ainda não conectados.
     azure_client_id: str = ""  # user-assigned managed identity
     key_vault_uri: str = ""
