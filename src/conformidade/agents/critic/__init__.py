@@ -1,0 +1,32 @@
+"""Camada 4 — o crítico.
+
+A única camada com LLM é a 3, e portanto a única que pode inventar. Esta é a
+trava: confere a saída do analista sem modelo nenhum, e rebaixa ou descarta o
+que não se sustenta.
+"""
+
+from conformidade.agents.critic.contracts import (
+    AchadoCriticado,
+    CatalogoDeCorrecoes,
+    CorrecaoAplicavel,
+    Formato,
+    ItemDoRelatorio,
+    Objecao,
+    RelatorioFinal,
+    Reparo,
+    VereditoCritico,
+)
+from conformidade.agents.critic.critico import criticar
+
+__all__ = [
+    "AchadoCriticado",
+    "CatalogoDeCorrecoes",
+    "CorrecaoAplicavel",
+    "Formato",
+    "ItemDoRelatorio",
+    "Objecao",
+    "RelatorioFinal",
+    "Reparo",
+    "VereditoCritico",
+    "criticar",
+]
