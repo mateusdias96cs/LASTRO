@@ -57,6 +57,9 @@ class AchadoNaResposta(BaseModel):
     correcao: str = ""
     correcao_caminho: str = ""
     corrigido_automaticamente: bool = False
+    # `False` quando a explicação veio do catálogo determinístico em vez da
+    # camada 3 — a tela marca quais achados têm contextualização de verdade.
+    explicado_por_ia: bool = False
 
 
 class RespostaAuditoria(BaseModel):
@@ -66,6 +69,13 @@ class RespostaAuditoria(BaseModel):
     corrigidos_automaticamente: list[str] = Field(default_factory=list)
     dependem_de_voce: dict[str, str] = Field(default_factory=dict)
     com_analise: bool = False
+    # Quantos achados a camada 3 explicou, de fato. A degradação é parcial: o
+    # limite de requisições por minuto do deployment pode derrubar os últimos
+    # de um arquivo grande, e a tela precisa poder dizer "3 de 9" em vez de
+    # afirmar que a IA participou ou não participou.
+    explicados_por_ia: int = 0
+    # Por que a camada 3 não participou de tudo. Vazio quando participou.
+    motivo_sem_ia: str = ""
     # O que o usuário cola no lugar do original.
     configuracao_corrigida: str = ""
     relatorio_markdown: str = ""
@@ -141,6 +151,8 @@ def _achados(resultado) -> list[AchadoNaResposta]:
                 correcao=correcao.trecho if correcao else "",
                 correcao_caminho=correcao.caminho if correcao else "",
                 corrigido_automaticamente=achado.control_id in aplicados,
+                explicado_por_ia=bool(citacoes)
+                or bool(analisado and analisado.justificativa_do_ajuste),
             )
         )
 
@@ -168,6 +180,8 @@ async def post_auditar(
         corrigidos_automaticamente=resultado.aplicacao.aplicados,
         dependem_de_voce=resultado.aplicacao.manuais,
         com_analise=resultado.com_analise,
+        explicados_por_ia=resultado.explicados_por_ia,
+        motivo_sem_ia=resultado.motivo_sem_ia,
         configuracao_corrigida=resultado.aplicacao.conteudo,
         relatorio_markdown=resultado.markdown,
         achados=_achados(resultado),

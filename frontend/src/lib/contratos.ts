@@ -39,6 +39,8 @@ export interface Achado {
   correcao: string;
   correcao_caminho: string;
   corrigido_automaticamente: boolean;
+  /** `false` quando a explicação veio do catálogo, não da camada de IA. */
+  explicado_por_ia: boolean;
 }
 
 /** `RespostaAuditoria` */
@@ -50,8 +52,19 @@ export interface Auditoria {
   corrigidos_automaticamente: string[];
   /** control_id → por que exige decisão humana. */
   dependem_de_voce: Record<string, string>;
-  /** `false` quando a camada 3 não participou (Azure indisponível). */
+  /** `true` quando ao menos um achado foi explicado pela camada de IA. */
   com_analise: boolean;
+  /**
+   * Quantos achados a IA explicou, de fato.
+   *
+   * A degradação é PARCIAL, não binária: o deployment tem limite de
+   * requisições por minuto, então um arquivo com dez achados pode sair com
+   * três explicados e sete vindos do catálogo. Dizer "com IA" ou "sem IA"
+   * seria verdade pela metade nos dois casos.
+   */
+  explicados_por_ia: number;
+  /** Por que a IA não explicou tudo. Vazio quando explicou. */
+  motivo_sem_ia: string;
   /** O arquivo inteiro, pronto para substituir o original. */
   configuracao_corrigida: string;
   relatorio_markdown: string;

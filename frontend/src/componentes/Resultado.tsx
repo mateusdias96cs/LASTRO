@@ -61,13 +61,7 @@ export function Resultado({ auditoria, aoRecomecar }: { auditoria: Auditoria; ao
         </button>
       </header>
 
-      {!auditoria.com_analise && (
-        <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-          A contextualização por IA não estava disponível nesta análise. As explicações vêm
-          do catálogo de controles, que é determinístico — a configuração corrigida é a
-          mesma de qualquer forma.
-        </p>
-      )}
+      <AvisoDeCobertura auditoria={auditoria} />
 
       {/* ---------------------------------------------- 1. o que fazer */}
       <section className="space-y-3">
@@ -142,6 +136,44 @@ export function Resultado({ auditoria, aoRecomecar }: { auditoria: Auditoria; ao
   );
 }
 
+/**
+ * Quanto da análise teve contextualização de IA.
+ *
+ * Três estados, não dois. A degradação é parcial — o deployment tem limite de
+ * requisições por minuto — então "3 de 9 explicados" é a informação honesta, e
+ * um aviso binário seria enganoso nas duas direções.
+ *
+ * Em todos os casos vale a mesma ressalva: **a configuração corrigida não
+ * depende disso.** Ela sai das camadas determinísticas, e é o que a pessoa veio
+ * buscar.
+ */
+function AvisoDeCobertura({ auditoria }: { auditoria: Auditoria }) {
+  const total = auditoria.achados.length;
+  const comIa = auditoria.explicados_por_ia;
+  if (total === 0 || comIa === total) return null;
+
+  const parcial = comIa > 0;
+  return (
+    <p
+      className={`rounded-md border p-3 text-xs ${
+        parcial
+          ? "border-amber-200 bg-amber-50 text-amber-900"
+          : "border-slate-200 bg-slate-50 text-slate-600"
+      }`}
+    >
+      {parcial
+        ? `${comIa} de ${total} achados receberam contextualização por IA. Os demais usam
+           as explicações do catálogo de controles.`
+        : `As explicações abaixo vêm do catálogo de controles, não da IA.`}{" "}
+      <strong>A configuração corrigida é a mesma de qualquer forma</strong> — ela não
+      depende da camada de IA.
+      {auditoria.motivo_sem_ia && (
+        <span className="mt-1 block font-mono opacity-70">{auditoria.motivo_sem_ia}</span>
+      )}
+    </p>
+  );
+}
+
 function ItemDeAuditoria({ achado, linguagem }: { achado: Achado; linguagem: string }) {
   const [aberto, setAberto] = useState(false);
 
@@ -156,6 +188,7 @@ function ItemDeAuditoria({ achado, linguagem }: { achado: Achado; linguagem: str
         <span className="text-sm font-medium">{achado.titulo}</span>
         <span className="flex shrink-0 items-center gap-2 text-xs">
           {achado.corrigido_automaticamente && <span title="corrigido automaticamente">✓</span>}
+          {achado.explicado_por_ia && <span title="explicado pela camada de IA">✦</span>}
           <span className="font-mono opacity-60">{achado.control_id}</span>
           <span aria-hidden>{aberto ? "−" : "+"}</span>
         </span>
