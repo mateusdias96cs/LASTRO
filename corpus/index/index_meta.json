@@ -1,7 +1,7 @@
 {
- "corpus_versao": "2b0e47959696e243",
+ "corpus_versao": "fae2d30e3e88bb35",
  "dimensao": 384,
  "modelo": "BAAI/bge-small-en-v1.5",
- "total_chunks": 1224,
+ "total_chunks": 1271,
  "total_consultas": 36
 }

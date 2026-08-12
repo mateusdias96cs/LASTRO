@@ -14,6 +14,38 @@ Duas restrições moldam o desenho:
 O `heading_path` é prefixado ao texto do chunk de propósito: um trecho
 recuperado isoladamente precisa carregar o contexto de onde veio, tanto para a
 busca casar quanto para o agente de análise entender o que está lendo.
+
+## Preservar a estrutura de tabela: medido e rejeitado
+
+`<td>` vira espaço, então tabela desmorona em prosa corrida. Isso é real e
+visível: o Pod Security Standards — uma tabela de campo → valor permitido, o
+documento mais bem estruturado do corpus — sai com sete controles amontoados
+num bloco sem fronteira entre eles.
+
+Foi implementado o conserto: `<tr>` passa a emitir `\\n`, `_fechar_secao`
+preserva a quebra, e o fatiamento trata a linha como unidade atômica. O chunk
+do `hostPort` virou exatamente um controle, limpo. E o resultado piorou o
+sistema:
+
+    métrica                              antes    depois
+    recall@5 (página)                    0,766    0,771
+    recall@10 (página)                   0,936    0,941
+    controles com trecho normativo       13/19    11/19
+    controles com distrator no top-5         5        6
+
+Subiu a métrica de página e caiu a do consumidor. Especificamente, o
+`CONF-WLD-004` (hostNetwork, severidade crítica) saiu da posição 6 para a 7 e
+deixou de ser entregue, e o `CONF-WLD-010` foi da posição 1 para apagado pelo
+agrupamento — deslocamento de fronteira muda qual chunk de uma página ganha a
+vaga. Também foi varrido o alvo de empacotamento das linhas (12, 60, 120, 200,
+480 tokens): empacotar até o limite é o melhor de todos, e fatiar em uma linha
+por chunk explode o corpus para 6.978 chunks com mediana de 25 palavras, o que
+faz a normalização de comprimento do BM25 premiar fragmento curto de página
+irrelevante.
+
+Conclusão: o diagnóstico estava certo e a prescrição, errada. A tabela triturada
+não era o gargalo. O gargalo é o corpus não conter enunciado normativo para
+esses controles — ver `agents/retrieval/cobertura.py`.
 """
 
 from __future__ import annotations
