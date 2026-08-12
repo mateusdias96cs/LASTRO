@@ -60,6 +60,7 @@ MANUAL: dict[str, str] = {
     "CONF-DKR-006": "Atualizar a imagem base exige escolher a nova versão.",
     "CONF-DKR-011": "Quais caminhos copiar depende da estrutura do seu projeto.",
     "CONF-DKR-014": "Mover o segredo para o build exige configurar a origem dele.",
+    "CONF-K8S-004": "Só você sabe em qual namespace esta carga deve rodar.",
 }
 
 # ---------------------------------------------------------------------------
@@ -78,6 +79,8 @@ PATCH_COMPOSE: dict[str, dict[str, Any]] = {
 }
 
 PATCH_K8S: dict[str, dict[str, Any]] = {
+    # Nível do pod. `_alvo_kubernetes` já entrega o nó certo.
+    "CONF-K8S-003": {"automountServiceAccountToken": False},
     "CONF-K8S-001": {"securityContext": {"allowPrivilegeEscalation": False}},
     "CONF-K8S-002": {"securityContext": {"seccompProfile": {"type": "RuntimeDefault"}}},
     "CONF-WLD-001": {"securityContext": {"privileged": False}},
@@ -105,6 +108,9 @@ REMOCOES: dict[str, tuple[tuple[str, str | None], ...]] = {
     ),
     # Capability de alto risco sai; nada é concedido em troca.
     "CONF-WLD-005": (("cap_add", None),),
+    # `hostPort` sai; `containerPort` fica, senão o container perde a porta.
+    # Publicar por Service é decisão de topologia e vai no relatório, não aqui.
+    "CONF-K8S-005": (),
     "CONF-DKR-012": (),
 }
 
@@ -128,6 +134,8 @@ def descricao_do_reparo(control_id: str, formato: Formato) -> str:
         partes.append("removeu as capabilities de alto risco concedidas")
     if control_id == "CONF-CMP-002":
         partes.append("prefixou as portas publicadas com `127.0.0.1`, mantendo os números")
+    if control_id == "CONF-K8S-005":
+        partes.append("removeu `hostPort`, preservando `containerPort`")
     if control_id == "CONF-WLD-003":
         partes.append("acrescentou `:ro` à montagem do host")
 
@@ -208,6 +216,94 @@ def _navegar(raiz: Any, pointer: str) -> Any:
     return atual
 
 
+# Onde mora o `podSpec` em cada tipo de recurso. Sem isto não há como sair do
+# ponteiro lógico para o lugar real no YAML.
+_CAMINHO_DO_POD = {
+    "Pod": ("spec",),
+    "Deployment": ("spec", "template", "spec"),
+    "StatefulSet": ("spec", "template", "spec"),
+    "DaemonSet": ("spec", "template", "spec"),
+    "ReplicaSet": ("spec", "template", "spec"),
+    "ReplicationController": ("spec", "template", "spec"),
+    "Job": ("spec", "template", "spec"),
+    "CronJob": ("spec", "jobTemplate", "spec", "template", "spec"),
+}
+
+# Controles que se corrigem no POD, não no container. O resto é do container.
+_NO_NIVEL_DO_POD = frozenset(
+    {
+        "CONF-WLD-004",  # hostNetwork / hostPID / hostIPC
+        "CONF-K8S-003",  # automountServiceAccountToken
+    }
+)
+
+
+def _descer(no: Any, caminho: tuple[str, ...]) -> Any:
+    for parte in caminho:
+        if not isinstance(no, dict) or parte not in no:
+            return None
+        no = no[parte]
+    return no
+
+
+def _alvo_kubernetes(documentos: list[Any], pointer: str, control_id: str) -> Any:
+    """Resolve o ponteiro LÓGICO da camada 1 para o nó real do YAML.
+
+    A camada 1 emite `Deployment.loja-carrinho.container.carrinho`: tipo, nome
+    do recurso, e nome do container. Isso não é um caminho de YAML — é uma
+    identificação. Tratá-lo como caminho foi o bug que deixou o aplicador sem
+    efeito nenhum em manifesto do Kubernetes, enquanto no Compose ele
+    funcionava por coincidência, porque lá `services.api` é literalmente onde o
+    serviço mora.
+
+    Sintoma: catorze achados num Deployment, zero correções aplicadas, e nada
+    no log — `_navegar` devolvia `None` e o achado ia silenciosamente para a
+    lista de não aplicados.
+    """
+    partes = pointer.split(".")
+    if len(partes) < 2:
+        return None
+    kind, nome = partes[0], partes[1]
+    caminho_pod = _CAMINHO_DO_POD.get(kind)
+    if caminho_pod is None:
+        return None
+
+    documento = next(
+        (
+            d
+            for d in documentos
+            if isinstance(d, dict)
+            and d.get("kind") == kind
+            and (d.get("metadata") or {}).get("name") == nome
+        ),
+        None,
+    )
+    if documento is None:
+        return None
+
+    if control_id == "CONF-K8S-004":  # namespace mora no metadata
+        return documento.setdefault("metadata", {})
+
+    pod = _descer(documento, caminho_pod)
+    if not isinstance(pod, dict):
+        return None
+    if control_id in _NO_NIVEL_DO_POD:
+        return pod
+
+    # Container nomeado. `container` é literal no ponteiro, e o nome vem
+    # depois — fatiar pela direita evita quebrar com nome que contenha ponto.
+    if "container" not in partes:
+        return pod
+    nome_container = ".".join(partes[partes.index("container") + 1 :])
+    containers = pod.get("containers")
+    if not isinstance(containers, list):
+        return None
+    return next(
+        (c for c in containers if isinstance(c, dict) and c.get("name") == nome_container),
+        None,
+    )
+
+
 def _remover(alvo: dict[str, Any], control_id: str) -> bool:
     mexeu = False
     for chave, marca in REMOCOES.get(control_id, ()):
@@ -236,6 +332,23 @@ def _remover(alvo: dict[str, Any], control_id: str) -> bool:
             if not caps["add"]:
                 caps.pop("add")
             mexeu = mexeu or caps.get("add") != antes
+    return mexeu
+
+
+def _remover_hostport(alvo: dict[str, Any]) -> bool:
+    """Tira só o `hostPort`, preservando `containerPort` e o nome.
+
+    Apagar a entrada inteira de `ports` faria o container perder a porta que a
+    aplicação escuta — conserto que quebra é pior que achado não corrigido.
+    """
+    portas = alvo.get("ports")
+    if not isinstance(portas, list):
+        return False
+    mexeu = False
+    for porta in portas:
+        if isinstance(porta, dict) and "hostPort" in porta:
+            porta.pop("hostPort")
+            mexeu = True
     return mexeu
 
 
@@ -285,6 +398,7 @@ def _somente_leitura_no_host(alvo: dict[str, Any]) -> bool:
 _ESPECIAIS = {
     "CONF-CMP-002": _publicar_no_loopback,
     "CONF-WLD-003": _somente_leitura_no_host,
+    "CONF-K8S-005": _remover_hostport,
 }
 
 
@@ -302,11 +416,14 @@ def _aplicar_yaml(conteudo: str, achados: list[Finding], formato: Formato) -> Ap
             continue
 
         pointer = (achado.location.pointer or "") if achado.location else ""
-        alvo = None
-        for doc in documentos:
-            alvo = _navegar(doc, pointer)
-            if isinstance(alvo, dict):
-                break
+        if formato is Formato.KUBERNETES:
+            alvo = _alvo_kubernetes(documentos, pointer, cid)
+        else:
+            alvo = None
+            for doc in documentos:
+                alvo = _navegar(doc, pointer)
+                if isinstance(alvo, dict):
+                    break
 
         if not isinstance(alvo, dict):
             nao.append(cid)

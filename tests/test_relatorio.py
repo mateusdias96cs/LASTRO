@@ -187,3 +187,61 @@ def test_analisador_que_falha_nao_derruba_a_correcao():
     r = auditar(COMPOSE_RUIM, "compose.yaml", analisador=Quebrado())
     assert yaml.safe_load(r.aplicacao.conteudo)["services"]["api"]["privileged"] is False
     assert r.formato is Formato.COMPOSE
+
+
+# ------------------------------ Kubernetes: ponteiro lógico, não caminho YAML
+
+K8S_COMPLETO = """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loja-carrinho
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+        - name: carrinho
+          image: loja/carrinho:latest
+          securityContext:
+            privileged: true
+          ports:
+            - hostPort: 8080
+              containerPort: 8080
+"""
+
+
+def test_manifesto_do_kubernetes_recebe_correcoes():
+    """Regressão: a camada 1 emite ponteiro LÓGICO
+    (`Deployment.loja-carrinho.container.carrinho`), não caminho de YAML.
+    Tratá-lo como caminho deixava o aplicador sem efeito nenhum em manifesto —
+    catorze achados, zero correções, e nada no log."""
+    r = auditar(K8S_COMPLETO, "deployment.yaml")
+    assert len(r.aplicacao.aplicados) >= 8, r.aplicacao.nao_aplicados
+    assert not r.aplicacao.nao_aplicados
+
+
+def test_patch_vai_no_nivel_certo_do_manifesto():
+    doc = yaml.safe_load(auditar(K8S_COMPLETO, "deployment.yaml").aplicacao.conteudo)
+    pod = doc["spec"]["template"]["spec"]
+    container = pod["containers"][0]
+    # pod
+    assert "hostNetwork" not in pod
+    assert pod["automountServiceAccountToken"] is False
+    # container
+    assert container["securityContext"]["privileged"] is False
+    assert container["securityContext"]["readOnlyRootFilesystem"] is True
+
+
+def test_hostport_sai_e_containerport_fica():
+    """Apagar a porta inteira faria o container perder onde escuta — conserto
+    que quebra é pior que achado não corrigido."""
+    doc = yaml.safe_load(auditar(K8S_COMPLETO, "deployment.yaml").aplicacao.conteudo)
+    porta = doc["spec"]["template"]["spec"]["containers"][0]["ports"][0]
+    assert "hostPort" not in porta
+    assert porta["containerPort"] == 8080
+
+
+def test_namespace_depende_do_usuario():
+    """Só quem envia sabe em qual namespace a carga deve rodar."""
+    r = auditar(K8S_COMPLETO, "deployment.yaml")
+    assert "CONF-K8S-004" in r.aplicacao.manuais
