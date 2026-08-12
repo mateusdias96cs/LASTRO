@@ -261,3 +261,20 @@ def test_chunk_envenenado_nao_vira_fonte_valida_para_outro_trecho():
 def test_criticar_e_deterministico():
     entrada, saida = _entrada(contexto=PAYLOADS[0]), _saida()
     assert criticar(entrada, saida).model_dump_json() == criticar(entrada, saida).model_dump_json()
+
+
+def test_veredito_desviado_sem_justificativa_volta_para_confirmado():
+    """Achado numa rodada real: o modelo respondeu `nao_verificavel` com
+    severidade high→high — desviou o veredito sem mexer na severidade.
+
+    Reverter só a severidade não alterava nada, e o validador do contrato,
+    que proíbe reparo sem mudança, derrubava a análise com ValidationError.
+    O que estava injustificado era o veredito.
+    """
+    from conformidade.agents.analysis.contracts import Veredito
+
+    saida = _saida(veredito=Veredito.NAO_VERIFICAVEL, justificativa_do_ajuste="")
+    r = criticar(_entrada(), saida)
+    assert r.veredito is VereditoCritico.REBAIXADO
+    assert r.analisado.veredito is Veredito.CONFIRMADO
+    assert r.analisado.severidade_ajustada is Severity.CRITICAL

@@ -24,7 +24,12 @@ texto do usuário não entra em nenhuma decisão desta camada.
 
 from __future__ import annotations
 
-from conformidade.agents.analysis.contracts import AchadoAnalisado, Confianca, EntradaAnalise
+from conformidade.agents.analysis.contracts import (
+    AchadoAnalisado,
+    Confianca,
+    EntradaAnalise,
+    Veredito,
+)
 from conformidade.agents.critic.contracts import (
     AchadoCriticado,
     Objecao,
@@ -88,8 +93,15 @@ def criticar(entrada: EntradaAnalise, saida: AchadoAnalisado) -> AchadoCriticado
         reprovadas = {i for i, c in enumerate(saida.citacoes) if c not in mantidas}
         corrigido = corrigido.model_copy(update={"citacoes": list(mantidas)})
 
-    # 3. Ajuste de severidade sem justificativa volta ao que a camada 1
-    #    detectou. O determinístico prevalece sobre o não justificado.
+    # 3. Desvio sem justificativa volta ao que a camada 1 detectou — veredito
+    #    E severidade. O determinístico prevalece sobre o não justificado.
+    #
+    #    Reverter só a severidade era insuficiente e quebrava: numa rodada real
+    #    o modelo respondeu `nao_verificavel` com severidade high→high, ou seja,
+    #    desviou o veredito sem mexer na severidade. O reparo não alterava nada,
+    #    e o validador do contrato — que proíbe reparo sem mudança — derrubava a
+    #    análise com ValidationError. O que estava injustificado era o veredito;
+    #    é ele que precisa voltar.
     for f in v.ajuste_justificado(entrada, corrigido):
         objecoes.append(
             Objecao(
@@ -99,7 +111,11 @@ def criticar(entrada: EntradaAnalise, saida: AchadoAnalisado) -> AchadoCriticado
             )
         )
         corrigido = corrigido.model_copy(
-            update={"severidade_ajustada": entrada.severidade_detectada}
+            update={
+                "veredito": Veredito.CONFIRMADO,
+                "severidade_ajustada": entrada.severidade_detectada,
+                "justificativa_do_ajuste": "",
+            }
         )
 
     # 4. Perder citação rebaixa a confiança: a afirmação continua, o respaldo
