@@ -1,0 +1,16 @@
+/** O hexágono do Lastro: casco, linha d'água e o L do calado. */
+export function Marca({ tamanho = 30, id }: { tamanho?: number; id?: string }) {
+  return (
+    <svg id={id} width={tamanho} height={tamanho} viewBox="0 0 100 100" fill="none" aria-hidden>
+      <path d="M28 10 L72 10 L96 50 L72 90 L28 90 L4 50 Z" stroke="#AEB9C0" strokeWidth="2.2" />
+      <path
+        d="M31.1 15.6 L68.9 15.6 L89.6 50 L68.9 84.4 L31.1 84.4 L10.4 50 Z"
+        stroke="#385260"
+        strokeWidth="1.4"
+      />
+      <path d="M41 30 V64 M41 64 H63" stroke="#E7ECEE" strokeWidth="3" strokeLinecap="square" />
+      <circle cx="41" cy="52" r="7" stroke="#D97B45" strokeWidth="2.4" />
+      <path d="M30 52 H34 M48 52 H62" stroke="#D97B45" strokeWidth="2.4" strokeLinecap="square" />
+    </svg>
+  );
+}

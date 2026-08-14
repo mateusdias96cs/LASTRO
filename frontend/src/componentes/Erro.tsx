@@ -1,39 +1,58 @@
 import type { ErroDaApi } from "@/lib/api";
+import type { Idioma } from "@/lib/idioma";
 
 /**
  * Falha com nome, causa provável e o que fazer.
  *
- * Um frontend "que funciona" não é o caminho feliz funcionando — é cada modo
- * de falha ter uma tela própria em vez de travar em branco ou despejar erro
- * técnico. O detalhe técnico existe, mas fica no rodapé, para quem for
- * investigar; a mensagem principal é para quem só quer saber se o problema é
- * dele ou nosso.
+ * O detalhe técnico existe mas fica recolhido: a mensagem principal é para
+ * quem só quer saber se o problema é dele ou nosso.
  */
-export function Erro({ erro, aoTentarDeNovo }: { erro: ErroDaApi; aoTentarDeNovo: () => void }) {
+export function Erro({
+  erro,
+  aoTentarDeNovo,
+  lang,
+}: {
+  erro: ErroDaApi;
+  aoTentarDeNovo: () => void;
+  lang: Idioma;
+}) {
   const culpaDoUsuario = erro.tipo === "arquivo_invalido" || erro.tipo === "arquivo_grande";
-
   return (
     <div
       role="alert"
-      className={`rounded-lg border p-6 ${
-        culpaDoUsuario ? "border-amber-300 bg-amber-50" : "border-red-300 bg-red-50"
-      }`}
+      className="p-6"
+      style={{
+        border: `1px solid ${culpaDoUsuario ? "#6b5417" : "#6b3417"}`,
+        background: culpaDoUsuario ? "#16130b" : "#160f0b",
+      }}
     >
-      <p className="font-medium text-slate-900">{erro.mensagem}</p>
-      {erro.sugestao && <p className="mt-2 text-sm text-slate-700">{erro.sugestao}</p>}
-
+      <p className="font-medium" style={{ color: "var(--texto)" }}>
+        {erro.mensagem}
+      </p>
+      {erro.sugestao && (
+        <p className="mt-2 text-sm" style={{ color: "var(--texto-2)" }}>
+          {erro.sugestao}
+        </p>
+      )}
       <button
         type="button"
         onClick={aoTentarDeNovo}
-        className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700"
+        className="mt-4 px-5 py-2.5 text-sm font-semibold"
+        style={{ background: "var(--acento-forte)", color: "var(--fundo)" }}
       >
-        Tentar de novo
+        {lang === "pt" ? "Tentar de novo" : "Try again"}
       </button>
-
       {erro.detalhe && (
         <details className="mt-4">
-          <summary className="cursor-pointer text-xs text-slate-500">Detalhe técnico</summary>
-          <p className="mt-1 break-words font-mono text-xs text-slate-500">{erro.detalhe}</p>
+          <summary className="cursor-pointer text-xs" style={{ color: "var(--texto-4)" }}>
+            {lang === "pt" ? "Detalhe técnico" : "Technical detail"}
+          </summary>
+          <p
+            className="mt-1 break-words text-xs"
+            style={{ fontFamily: "var(--mono)", color: "var(--texto-4)" }}
+          >
+            {erro.detalhe}
+          </p>
         </details>
       )}
     </div>

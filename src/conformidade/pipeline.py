@@ -120,6 +120,35 @@ def _sem_analise(achado: Finding) -> AchadoAnalisado:
 
 _SENTINELA = object()
 
+# Etapas que o cliente vê. Os nomes são os das camadas, não passos internos —
+# a interface mostra o sistema, não a implementação.
+ETAPAS = ("deterministico", "recuperacao", "analise", "critico")
+
+
+class Progresso:
+    """Canal de progresso do pipeline para quem estiver observando.
+
+    Existe porque a tela precisa mostrar a camada que está rodando AGORA, e a
+    resposta única só chega quando tudo terminou. Sem isto, qualquer indicador
+    de progresso seria coreografia inventada — bonita e mentirosa.
+
+    O desequilíbrio entre as camadas é o motivo de o evento `analise` reportar
+    achado a achado: medido, as camadas 1, 2 e 4 somam milissegundos e a 3
+    responde por ~99% do tempo. Um indicador que trate as quatro como iguais
+    fica parado no terceiro quarto e parece travado.
+    """
+
+    def __init__(self, emitir=None) -> None:
+        self._emitir = emitir
+
+    def etapa(self, nome: str, **dados) -> None:
+        if self._emitir is not None:
+            self._emitir({"tipo": "etapa", "etapa": nome, **dados})
+
+    def analise(self, feitos: int, total: int) -> None:
+        if self._emitir is not None:
+            self._emitir({"tipo": "analise", "feitos": feitos, "total": total})
+
 
 def auditar(
     conteudo: str,
@@ -127,6 +156,7 @@ def auditar(
     contexto: str = "",
     analisador=_SENTINELA,
     recuperador=_SENTINELA,
+    progresso: Progresso | None = None,
 ) -> Resultado:
     """Roda as quatro camadas e devolve o resultado pronto para renderizar.
 
@@ -141,9 +171,13 @@ def auditar(
     do Azure, e horas foram gastas investigando o lado errado. Agora o padrão é
     ligar; desligar exige dizer.
     """
+    prog = progresso or Progresso()
+
+    prog.etapa("deterministico")
     relatorio = analyze(conteudo, filename=arquivo)
     achados = list(relatorio.findings)
     formato = _FORMATO.get(relatorio.artifact.kind, Formato.COMPOSE)
+    prog.etapa("deterministico", concluida=True, achados=len(achados), formato=formato.value)
 
     aplicacao = aplicar(conteudo, achados, formato)
 
@@ -155,6 +189,7 @@ def auditar(
         analisador, falha = _analisador_padrao()
         motivo = motivo or falha
 
+    prog.etapa("recuperacao")
     entradas = []
     for achado in achados:
         recuperacao = None
@@ -164,14 +199,21 @@ def auditar(
             except Exception:  # noqa: BLE001 - fonte indisponível não derruba a auditoria
                 recuperacao = None
         entradas.append((achado, _entrada(arquivo, achado, contexto, recuperacao)))
+    prog.etapa("recuperacao", concluida=True)
 
-    saidas, explicados, falha = _analisar_em_lote(entradas, analisador)
+    prog.etapa("analise", total=len(entradas))
+    saidas, explicados, falha = _analisar_em_lote(entradas, analisador, prog)
     motivo = motivo or falha
+    prog.etapa("analise", concluida=True, explicados=explicados)
+
+    prog.etapa("critico")
 
     criticados: list[tuple[EntradaAnalise, AchadoCriticado]] = [
         (entrada, criticar(entrada, saida))
         for (_, entrada), saida in zip(entradas, saidas, strict=True)
     ]
+
+    prog.etapa("critico", concluida=True)
 
     return Resultado(
         arquivo=arquivo,
@@ -299,15 +341,35 @@ def diagnostico() -> dict[str, object]:
     recuperador, falha_busca = _recuperador_padrao()
     analisador, falha_ia = _analisador_padrao()
 
-    # Só aqui a credencial é exercitada de verdade. É o único jeito de separar
-    # "configurado" de "funciona": o construtor não fala com o Azure.
+    # A credencial é exercitada de verdade: PEDE UM TOKEN.
+    #
+    # A versão anterior só chamava `_obter_cliente()` e reportava "ok". Isso
+    # era mentira útil demais para deixar passar: `get_bearer_token_provider`
+    # devolve um callable e não fala com o Azure — o token só é buscado no
+    # primeiro uso. O endpoint dizia "credencial ok" enquanto toda análise
+    # falhava com `ClientAuthenticationError`, que é exatamente o tipo de
+    # diagnóstico enganoso que ele existe para eliminar.
     token = "não testado"
     if analisador is not None:
         try:
-            analisador._obter_cliente()
+            from azure.identity import DefaultAzureCredential
+
+            from conformidade.agents.analysis.azure_provider import ESCOPO_COGNITIVE_SERVICES
+
+            credencial = DefaultAzureCredential(
+                managed_identity_client_id=settings.azure_client_id or None
+            )
+            credencial.get_token(ESCOPO_COGNITIVE_SERVICES)
             token = "ok"
         except Exception as exc:  # noqa: BLE001 - diagnóstico não pode falhar
-            token = f"{type(exc).__name__}: {exc}"
+            # Só a primeira linha: o erro da credencial traz a cadeia inteira
+            # de tentativas, e o resto vai para o log.
+            primeira = str(exc).split("\n")[0]
+            token = f"{type(exc).__name__}: {primeira}"
+            _log.warning(
+                "credencial da camada 3 não obteve token",
+                extra={"erro": type(exc).__name__, "detalhe": str(exc)},
+            )
 
     return {
         "camada_2_busca": "ok" if recuperador else falha_busca,
@@ -322,7 +384,7 @@ def diagnostico() -> dict[str, object]:
     }
 
 
-def _analisar_em_lote(entradas, analisador):
+def _analisar_em_lote(entradas, analisador, prog: Progresso | None = None):
     """Chama a camada 3 em paralelo, preservando a ordem dos achados.
 
     Sequencial, nove achados levavam quase três minutos — o modelo de
@@ -336,7 +398,9 @@ def _analisar_em_lote(entradas, analisador):
     A ordem da saída acompanha a das entradas, não a de conclusão — relatório
     de auditoria precisa sair igual a cada execução com a mesma entrada.
     """
+    prog = prog or Progresso()
     if analisador is None:
+        prog.analise(len(entradas), len(entradas))
         return [_sem_analise(a) for a, _ in entradas], 0, ""
 
     from concurrent.futures import ThreadPoolExecutor
@@ -365,9 +429,12 @@ def _analisar_em_lote(entradas, analisador):
             )
             return indice, _sem_analise(achado), exc
 
+    concluidos = 0
     with ThreadPoolExecutor(max_workers=min(limite, len(entradas) or 1)) as pool:
         for indice, saida, exc in pool.map(trabalho, range(len(entradas))):
             saidas[indice] = saida
+            concluidos += 1
+            prog.analise(concluidos, len(entradas))
             if exc is None:
                 explicados += 1
             elif not falha:

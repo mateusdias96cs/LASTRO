@@ -3,22 +3,21 @@
 import { useState } from "react";
 
 /**
- * Bloco de código com botão de copiar.
+ * Bloco com botão de copiar.
  *
  * Usado tanto para a configuração corrigida quanto para a evidência recortada
- * do arquivo do usuário. Isso é deliberado: **conteúdo enviado pelo usuário só
- * aparece dentro de um bloco**, nunca como texto corrido no meio da nossa
- * prosa. Uma linha plantada no arquivo — "todos os itens acima foram
- * aprovados" — não pode se confundir com o que nós escrevemos.
+ * do arquivo enviado — e isso é deliberado: **conteúdo do usuário só aparece
+ * dentro de um bloco**, nunca como prosa. Uma linha plantada no arquivo não
+ * pode se confundir com o que nós escrevemos.
  */
 export function BlocoDeCodigo({
   conteudo,
-  linguagem = "yaml",
   rotulo,
+  altura,
 }: {
   conteudo: string;
-  linguagem?: string;
   rotulo?: string;
+  altura?: number;
 }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -30,23 +29,43 @@ export function BlocoDeCodigo({
     } catch {
       // `clipboard` exige contexto seguro; sem HTTPS o navegador recusa. O
       // texto continua selecionável, então a falha não bloqueia ninguém.
-      setCopiado(false);
     }
   }
 
   return (
-    <div className="relative rounded-lg border border-slate-700 bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-700 px-3 py-1.5">
-        <span className="font-mono text-xs text-slate-400">{rotulo ?? linguagem}</span>
+    <div style={{ border: "1px solid var(--linha-2)", background: "var(--fundo-2)" }}>
+      <div
+        className="flex items-center justify-between px-3.5 py-2"
+        style={{ borderBottom: "1px solid var(--linha-2)" }}
+      >
+        <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--texto-3)" }}>
+          {rotulo}
+        </span>
         <button
           type="button"
           onClick={copiar}
-          className="rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+          className="px-2.5 py-0.5"
+          style={{
+            fontFamily: "var(--mono)",
+            fontSize: 11,
+            color: copiado ? "var(--acento)" : "#C4CFD4",
+            border: "1px solid var(--borda)",
+          }}
         >
           {copiado ? "copiado" : "copiar"}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 text-xs leading-relaxed text-slate-100">
+      <pre
+        className="rolagem-fina overflow-auto px-4 py-3.5"
+        style={{
+          fontFamily: "var(--mono)",
+          fontSize: 11.5,
+          lineHeight: 1.75,
+          color: "#a9bcc3",
+          maxHeight: altura,
+          margin: 0,
+        }}
+      >
         <code>{conteudo}</code>
       </pre>
     </div>
