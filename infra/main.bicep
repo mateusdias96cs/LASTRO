@@ -25,12 +25,14 @@ param azureOpenAiEndpoint string = ''
 @description('Nome do deployment do modelo no Foundry. Ex.: gpt-4o-mini')
 param azureOpenAiDeployment string = ''
 
-@description('ID completo do recurso Azure OpenAI, para conceder acesso por identidade gerenciada.')
 @description('Resource id do Azure OpenAI. Vazio pula a atribuição de papel — e a aplicação sobe sem conseguir chamar o modelo.')
 param azureOpenAiResourceId string = ''
 
-@description('Tag da imagem a implantar. O pipeline passa o SHA do commit.')
-param imageTag string = 'latest'
+@description('Nome completo da imagem da API, incluindo registry e tag.')
+param apiImageName string = ''
+
+@description('Nome completo da imagem do frontend, incluindo registry e tag.')
+param webImageName string = ''
 
 // Sufixo determinístico: dois deploys do mesmo ambiente reusam os mesmos nomes,
 // e nomes globalmente únicos (ACR, Key Vault) não colidem entre assinaturas.
@@ -57,7 +59,8 @@ module recursos 'resources.bicep' = {
     tags: tags
     azureOpenAiEndpoint: azureOpenAiEndpoint
     azureOpenAiDeployment: azureOpenAiDeployment
-    imageTag: imageTag
+    apiImageName: apiImageName
+    webImageName: webImageName
   }
 }
 
@@ -85,3 +88,5 @@ output AZURE_CLIENT_ID string = recursos.outputs.identidadeClientId
 // condição some sem erro quando o parâmetro vem vazio — o deploy termina com
 // sucesso e a camada 3 falha em runtime, longe da causa.
 output PAPEL_OPENAI_ATRIBUIDO bool = !empty(azureOpenAiResourceId)
+
+output SERVICE_WEB_URI string = recursos.outputs.webUri

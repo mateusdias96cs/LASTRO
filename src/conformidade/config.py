@@ -39,6 +39,17 @@ class Settings(BaseSettings):
     azure_openai_endpoint: str = Field(default="", validation_alias="AZURE_OPENAI_ENDPOINT")
     azure_openai_deployment: str = Field(default="", validation_alias="AZURE_OPENAI_DEPLOYMENT")
     # Cache das respostas da camada 3, com chave derivada do conteúdo.
+    #
+    # O padrão relativo resolve a partir do CWD e serve ao desenvolvimento
+    # local, onde a raiz do repositório é gravável e o cache acumulado poupa
+    # crédito ao rodar a avaliação. Em container ele resolveria para
+    # `/app/.cache-analise`, e `/app` pertence a root — por isso o Bicep define
+    # `CONFORMIDADE_ANALISE_CACHE_DIR` explicitamente no Container App.
+    #
+    # Deixar o padrão local em vez de `/tmp` é possível porque a gravação não é
+    # crítica: `_guardar` trata a falha e a análise segue sem cache. Antes
+    # disso, um diretório sem permissão descartava a resposta já paga em
+    # tokens.
     analise_cache_dir: str = ".cache-analise"
 
     # Quantos achados a camada 3 analisa em paralelo.

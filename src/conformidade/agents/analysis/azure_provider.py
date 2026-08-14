@@ -27,11 +27,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 from conformidade.agents.analysis.contracts import AchadoAnalisado, EntradaAnalise
 from conformidade.agents.retrieval.cobertura import motivo_da_ausencia, tem_respaldo_oficial
 from conformidade.agents.retrieval.controls import documento_de
+
+_log = logging.getLogger("conformidade.analise")
 
 ESCOPO_COGNITIVE_SERVICES = "https://cognitiveservices.azure.com/.default"
 API_VERSION = "2024-10-21"
@@ -77,6 +80,7 @@ class AnalisadorAzureOpenAI:
         self._temperatura = temperatura
         self._client_id = settings.azure_client_id
         self._cache_dir = cache_dir or Path(settings.analise_cache_dir)
+        self._cache_avisado = False
         self._cliente = None  # criado sob demanda: import pesado e credencial
 
     # -- cliente ------------------------------------------------------------
@@ -144,15 +148,58 @@ class AnalisadorAzureOpenAI:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
     def _do_cache(self, chave: str) -> AchadoAnalisado | None:
-        arquivo = self._cache_dir / f"{chave}.json"
-        if not arquivo.exists():
+        """Ler o cache nunca derruba a análise: no pior caso, recalcula."""
+        try:
+            arquivo = self._cache_dir / f"{chave}.json"
+            if not arquivo.exists():
+                return None
+            return AchadoAnalisado.model_validate_json(arquivo.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            # `ValueError` cobre JSON corrompido — meia escrita interrompida
+            # por reinício de réplica deixa arquivo inválido no disco.
+            self._avisar_cache("leitura", exc)
             return None
-        return AchadoAnalisado.model_validate_json(arquivo.read_text(encoding="utf-8"))
 
     def _guardar(self, chave: str, saida: AchadoAnalisado) -> None:
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
-        (self._cache_dir / f"{chave}.json").write_text(
-            saida.model_dump_json(indent=1), encoding="utf-8"
+        """Grava a resposta. **Falhar aqui não pode custar a análise.**
+
+        O cache é otimização, não dependência — mas a ordem em `analisar` o
+        tornava crítico sem querer: a gravação acontece DEPOIS da chamada ao
+        modelo e ANTES do `return`. Uma exceção aqui descartava uma resposta
+        que já tinha sido paga em tokens, e o achado caía para a explicação do
+        catálogo. Em produção isso se repetia a cada requisição, porque o cache
+        nunca chegava a existir.
+
+        Foi o que aconteceu no Container App: `/app` pertence a root, o usuário
+        10001 não podia criar `/app/.cache-analise`, e cada auditoria gastava a
+        cota inteira do modelo para jogar o resultado fora.
+        """
+        try:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            (self._cache_dir / f"{chave}.json").write_text(
+                saida.model_dump_json(indent=1), encoding="utf-8"
+            )
+        except OSError as exc:
+            self._avisar_cache("escrita", exc)
+
+    def _avisar_cache(self, operacao: str, exc: Exception) -> None:
+        """Avisa uma vez por processo, não por achado.
+
+        Sem isso, um diretório sem permissão gera um registro por achado em
+        toda requisição — o log fica ilegível justamente quando é mais
+        necessário, e o volume esconde o resto.
+        """
+        if self._cache_avisado:
+            return
+        self._cache_avisado = True
+        _log.warning(
+            "cache da camada 3 indisponível; a análise segue sem ele",
+            extra={
+                "operacao": operacao,
+                "diretorio": str(self._cache_dir),
+                "erro": type(exc).__name__,
+                "detalhe": str(exc),
+            },
         )
 
     # -- análise ------------------------------------------------------------
