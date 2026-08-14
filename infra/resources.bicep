@@ -7,6 +7,30 @@
 //
 // É o mesmo argumento do controle CONF-SEC-001 que o próprio sistema audita:
 // segredo que não existe não vaza.
+//
+// ── Domínio próprio num ambiente novo ────────────────────────────────────────
+//
+// Este template assume que `lastro.engineer` já está ligado ao app `web`. Num
+// ambiente do zero ele falha na criação do certificado, com:
+//
+//     Creating managed certificate requires hostname '...' added as a custom
+//     hostname to a container app in environment
+//
+// Não é defeito do template: é a dependência circular do issue #796. O
+// certificado exige o hostname registrado; o hostname, aqui, exige o
+// certificado. Duas saídas, nessa ordem de preferência:
+//
+// 1. Provisionar uma vez com o bloco `customDomains` do `web` comentado, rodar
+//    `az containerapp hostname bind --hostname lastro.engineer -n ca-web-<sufixo>
+//    -g <rg> --environment cae-<sufixo> --validation-method HTTP`, ajustar o
+//    nome do certificado abaixo para o que a CLI criou e reprovisionar.
+//
+// 2. Subir o `web` para a API 2025-07-01 e trocar o `customDomains` por
+//    `{ name: dominioWeb, bindingType: 'Auto' }`, sem `certificateId`, movendo
+//    o `dependsOn: [web]` para o certificado. `Auto` existe exatamente para
+//    quebrar esse ciclo e resolve em uma passagem. Não é o que está aqui
+//    porque, no ambiente atual, trocaria o `bindingType` de um binding vivo e
+//    em produção sem necessidade: o ciclo só existe na primeira vez.
 
 param location string
 param environmentName string
@@ -140,7 +164,7 @@ var variaveisComuns = [
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
   { name: 'AZURE_OPENAI_ENDPOINT', value: azureOpenAiEndpoint }
   { name: 'AZURE_OPENAI_DEPLOYMENT', value: azureOpenAiDeployment }
-  { name: 'CONFORMIDADE_CORS_ORIGINS', value: 'https://${web.properties.configuration.ingress.fqdn},http://localhost:3000' }
+  { name: 'CONFORMIDADE_CORS_ORIGINS', value: 'https://${web.properties.configuration.ingress.fqdn},https://lastro.engineer,http://localhost:3000' }
   // O cache da camada 3 precisa de um caminho gravável pelo usuário 10001.
   //
   // `/app` pertence a root: o `WORKDIR` do Dockerfile o cria assim, e os
@@ -276,6 +300,12 @@ output apiUri string = 'https://${api.properties.configuration.ingress.fqdn}'
 
 var imagemWeb = webImageName
 
+// Domínio próprio do frontend.
+//
+// O DNS fica fora do Azure: registro A no apex apontando para o IP estático do
+// ambiente, e TXT em `asuid` provando a posse. Aqui declaramos só o lado Azure.
+var dominioWeb = 'lastro.engineer'
+
 resource web 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-web-${prefixo}'
   location: location
@@ -293,6 +323,17 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 3000
         transport: 'auto'
         allowInsecure: false
+        // **Este bloco é o motivo de o domínio ter sumido.**
+        //
+        // O ARM não faz merge de `ingress`: cada PUT substitui o objeto
+        // inteiro. Enquanto o domínio existia só por `az containerapp hostname
+        // bind`, ele morava num campo que o template não declarava, e todo
+        // `azd provision` reescrevia o ingress sem ele. O site caía com
+        // ERR_CONNECTION_RESET até alguém refazer o bind à mão. Declarado
+        // aqui, o provision passa a reafirmá-lo em vez de apagá-lo.
+        customDomains: [
+          { name: dominioWeb, bindingType: 'SniEnabled', certificateId: certificadoWeb.id }
+        ]
       }
       registries: [
         { server: registry.properties.loginServer, identity: identidade.id }
@@ -318,4 +359,38 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
   dependsOn: [acrPull]
 }
 
+// Certificado gerenciado gratuito para o domínio próprio.
+//
+// **`domainControlValidation: 'HTTP'` não é escolha, é a regra do apex.** A
+// documentação da Microsoft tabela assim: domínio apex usa registro A e
+// validação HTTP; subdomínio usa CNAME e validação CNAME. `lastro.engineer` é
+// apex, então HTTP. CNAME aqui falha, e é o erro que já custou uma
+// configuração antes.
+//
+// **O nome é literal de propósito.** É o certificado que já existe e está
+// válido, criado por `az containerapp hostname bind`. Declarar com o mesmo
+// nome faz o ARM adotar o recurso em vez de emitir um segundo: nenhuma
+// validação HTTP nova, nenhuma janela sem certificado. O sufixo numérico veio
+// da CLI e não é derivável do `sufixo` do ambiente, por isso está cravado.
+//
+// **A ordem: certificado antes do app.** O `certificateId` acima cria a
+// dependência, então o ARM resolve este recurso primeiro. Funciona porque o
+// certificado já existe. Num ambiente novo, do zero, isso trava: emitir um
+// certificado gerenciado exige que o hostname já esteja registrado em algum
+// app do ambiente, e o app espera o certificado. É o issue #796
+// (microsoft/azure-container-apps), e a saída documentada está no cabeçalho
+// deste arquivo, em "Domínio próprio num ambiente novo".
+resource certificadoWeb 'Microsoft.App/managedEnvironments/managedCertificates@2025-07-01' = {
+  parent: ambiente
+  name: 'mc-cae-conflwqwpg-lastro-engineer-5216'
+  location: location
+  tags: tags
+  properties: {
+    subjectName: dominioWeb
+    domainControlValidation: 'HTTP'
+  }
+}
+
 output webUri string = 'https://${web.properties.configuration.ingress.fqdn}'
+output webDominio string = 'https://${dominioWeb}'
+output webCertificadoId string = certificadoWeb.id

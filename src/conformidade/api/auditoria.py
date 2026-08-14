@@ -12,19 +12,32 @@ camadas 1 e 4, que são determinísticas. Sem Azure configurado, o campo
 from __future__ import annotations
 
 import json
+import logging
 import queue
 import threading
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from conformidade.api.limite import limitar
 from conformidade.pipeline import Progresso, auditar, diagnostico
+
+_log = logging.getLogger("conformidade.api")
 
 router = APIRouter(prefix="/api/v1", tags=["auditoria"])
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+
+# Teto do campo livre que descreve a carga.
+#
+# Sem teto ele era aceito com 200.000 caracteres, medido. Dois problemas: o
+# texto vai junto de CADA achado para o modelo, então o custo em tokens é
+# multiplicado pelo número de achados; e um campo livre grande é o veículo
+# natural de injeção de prompt. 2.000 é folga larga para a frase que o
+# campo pede ("coletor de log em DaemonSet, precisa ler /var/log do nó").
+MAX_CONTEXTO_CHARS = 2000
 
 
 class CitacaoNaResposta(BaseModel):
@@ -86,7 +99,13 @@ class RespostaAuditoria(BaseModel):
 
 
 async def _ler(file: UploadFile) -> tuple[str, str]:
-    conteudo = await file.read()
+    # Lê um byte além do teto, e não o arquivo inteiro.
+    #
+    # A versão anterior fazia `await file.read()` e só então media o tamanho:
+    # para recusar um corpo grande, primeiro o materializava. Pedir
+    # `MAX + 1` basta para saber que estourou, e o que não couber nunca é
+    # trazido para a memória.
+    conteudo = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(conteudo) > MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
@@ -106,13 +125,30 @@ async def _ler(file: UploadFile) -> tuple[str, str]:
     return texto, file.filename or "entrada.yaml"
 
 
+# O que o cliente vê quando o parse falha. Sempre a mesma frase.
+#
+# A versão anterior interpolava a exceção, e isso vazava implementação: um
+# teste devolveu `maximum recursion depth exceeded`, e antes disso o
+# `PermissionError` do cache chegou à tela com o caminho absoluto dentro do
+# container. Nada disso ajuda quem enviou o arquivo, e tudo isso ajuda quem
+# está sondando. O detalhe continua existindo, no log, onde é útil.
+ERRO_DE_PARSE = (
+    "não foi possível interpretar o arquivo; confira se é um Dockerfile, "
+    "docker-compose ou manifesto do Kubernetes válido"
+)
+
+
 def _executar(texto: str, nome: str, contexto: str):
     try:
         return auditar(texto, arquivo=nome, contexto=contexto)
     except Exception as exc:  # noqa: BLE001 - arquivo inválido é erro do cliente
+        _log.warning(
+            "falha ao interpretar arquivo enviado",
+            extra={"erro": type(exc).__name__, "detalhe": str(exc), "arquivo": nome},
+        )
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"não foi possível interpretar o arquivo: {exc}",
+            detail=ERRO_DE_PARSE,
         ) from exc
 
 
@@ -163,10 +199,10 @@ def _achados(resultado) -> list[AchadoNaResposta]:
     return saida
 
 
-@router.post("/auditar", response_model=RespostaAuditoria)
+@router.post("/auditar", response_model=RespostaAuditoria, dependencies=[Depends(limitar)])
 async def post_auditar(
     file: Annotated[UploadFile, File()],
-    contexto: Annotated[str, Form()] = "",
+    contexto: Annotated[str, Form(max_length=MAX_CONTEXTO_CHARS)] = "",
 ) -> RespostaAuditoria:
     """Devolve a configuração corrigida e o relatório.
 
@@ -194,7 +230,11 @@ def _resposta(resultado) -> RespostaAuditoria:
     )
 
 
-@router.post("/auditar/configuracao", response_class=PlainTextResponse)
+@router.post(
+    "/auditar/configuracao",
+    response_class=PlainTextResponse,
+    dependencies=[Depends(limitar)],
+)
 async def post_configuracao(file: Annotated[UploadFile, File()]) -> str:
     """Só o arquivo corrigido, em texto puro.
 
@@ -222,10 +262,10 @@ def get_diagnostico() -> dict[str, object]:
 # --------------------------------------------------------------------------
 
 
-@router.post("/auditar/stream")
+@router.post("/auditar/stream", dependencies=[Depends(limitar)])
 async def post_auditar_stream(
     file: Annotated[UploadFile, File()],
-    contexto: Annotated[str, Form()] = "",
+    contexto: Annotated[str, Form(max_length=MAX_CONTEXTO_CHARS)] = "",
 ) -> StreamingResponse:
     """Mesma auditoria, com os eventos das camadas conforme acontecem.
 
@@ -259,7 +299,13 @@ async def post_auditar_stream(
                 )
                 fila.put({"tipo": "resultado", "dados": _resposta(resultado).model_dump()})
             except Exception as exc:  # noqa: BLE001 - vira evento de erro, não 500 no meio do stream
-                fila.put({"tipo": "erro", "detalhe": f"{type(exc).__name__}: {exc}"})
+                # Mesmo critério de `_executar`: o cliente recebe a frase
+                # estável, o log recebe o que serve para depurar.
+                _log.warning(
+                    "falha durante a auditoria em stream",
+                    extra={"erro": type(exc).__name__, "detalhe": str(exc), "arquivo": nome},
+                )
+                fila.put({"tipo": "erro", "detalhe": ERRO_DE_PARSE})
             finally:
                 fila.put(None)
 

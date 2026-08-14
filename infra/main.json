@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "2701998234519933963"
+      "templateHash": "1453528289441275945"
     }
   },
   "parameters": {
@@ -119,7 +119,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "1532056857720040737"
+              "templateHash": "13465331157867318869"
             }
           },
           "parameters": {
@@ -153,7 +153,8 @@
             "papelAcrPull": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
             "papelSegredosUser": "4633458b-17de-408a-b874-0445c86b69e6",
             "imagem": "[parameters('apiImageName')]",
-            "imagemWeb": "[parameters('webImageName')]"
+            "imagemWeb": "[parameters('webImageName')]",
+            "dominioWeb": "lastro.engineer"
           },
           "resources": [
             {
@@ -336,7 +337,7 @@
                         },
                         {
                           "name": "CONFORMIDADE_CORS_ORIGINS",
-                          "value": "[format('https://{0},http://localhost:3000', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
+                          "value": "[format('https://{0},https://lastro.engineer,http://localhost:3000', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
                         },
                         {
                           "name": "CONFORMIDADE_ANALISE_CACHE_DIR",
@@ -474,7 +475,7 @@
                         },
                         {
                           "name": "CONFORMIDADE_CORS_ORIGINS",
-                          "value": "[format('https://{0},http://localhost:3000', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
+                          "value": "[format('https://{0},https://lastro.engineer,http://localhost:3000', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
                         },
                         {
                           "name": "CONFORMIDADE_ANALISE_CACHE_DIR",
@@ -519,7 +520,14 @@
                     "external": true,
                     "targetPort": 3000,
                     "transport": "auto",
-                    "allowInsecure": false
+                    "allowInsecure": false,
+                    "customDomains": [
+                      {
+                        "name": "[variables('dominioWeb')]",
+                        "bindingType": "SniEnabled",
+                        "certificateId": "[resourceId('Microsoft.App/managedEnvironments/managedCertificates', format('cae-{0}', variables('prefixo')), 'mc-cae-conflwqwpg-lastro-engineer-5216')]"
+                      }
+                    ]
                   },
                   "registries": [
                     {
@@ -558,8 +566,23 @@
               "dependsOn": [
                 "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo'))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo'))), variables('papelAcrPull')))]",
                 "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', variables('prefixo')))]",
+                "[resourceId('Microsoft.App/managedEnvironments/managedCertificates', format('cae-{0}', variables('prefixo')), 'mc-cae-conflwqwpg-lastro-engineer-5216')]",
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo')))]",
                 "[resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/managedEnvironments/managedCertificates",
+              "apiVersion": "2025-07-01",
+              "name": "[format('{0}/{1}', format('cae-{0}', variables('prefixo')), 'mc-cae-conflwqwpg-lastro-engineer-5216')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subjectName": "[variables('dominioWeb')]",
+                "domainControlValidation": "HTTP"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', variables('prefixo')))]"
               ]
             }
           ],
@@ -591,6 +614,14 @@
             "webUri": {
               "type": "string",
               "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
+            },
+            "webDominio": {
+              "type": "string",
+              "value": "[format('https://{0}', variables('dominioWeb'))]"
+            },
+            "webCertificadoId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/managedEnvironments/managedCertificates', format('cae-{0}', variables('prefixo')), 'mc-cae-conflwqwpg-lastro-engineer-5216')]"
             }
           }
         }

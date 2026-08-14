@@ -6,8 +6,9 @@ pelas probes do AKS e usada também pelos health probes do Container Apps.
 
 from typing import Any
 
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from conformidade import __version__
 from conformidade.api.auditoria import router as auditoria_router
@@ -15,6 +16,11 @@ from conformidade.api.deterministic import router as deterministic_router
 from conformidade.api.retrieval import router as retrieval_router
 from conformidade.config import Settings, get_settings
 from conformidade.logging import configure_logging
+
+# Teto do corpo da requisição. O arquivo em si é limitado a 2 MiB pelas rotas;
+# a folga aqui cobre o envelope multipart (fronteiras, cabeçalhos de parte e o
+# campo `contexto`) sem deixar a porta aberta.
+MAX_CORPO_BYTES = 4 * 1024 * 1024
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -39,6 +45,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # usuário. Liberar credenciais só ampliaria a superfície à toa.
         allow_credentials=False,
     )
+
+    # Recusa pelo cabeçalho, antes de o corpo ser lido.
+    #
+    # As rotas já limitam a leitura a `MAX_UPLOAD_BYTES + 1`, o que protege a
+    # memória. Isto é a camada anterior: um corpo de 1 GB anunciado no
+    # `Content-Length` é recusado sem que um byte suba pela rede. Vale para
+    # toda rota, inclusive as que ainda não existem.
+    #
+    # Cabeçalho ausente (`Transfer-Encoding: chunked`) passa direto e cai na
+    # checagem das rotas, que é a que realmente protege.
+    @app.middleware("http")
+    async def limitar_corpo(request: Request, call_next):
+        declarado = request.headers.get("content-length")
+        if declarado and declarado.isdigit() and int(declarado) > MAX_CORPO_BYTES:
+            return JSONResponse(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                content={"detail": f"corpo acima do limite de {MAX_CORPO_BYTES} bytes"},
+            )
+        return await call_next(request)
 
     app.include_router(auditoria_router)
     app.include_router(deterministic_router)

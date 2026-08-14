@@ -35,7 +35,9 @@ def get_controls() -> list[ControlDescriptor]:
 @router.post("/analyze", response_model=DeterministicReport)
 async def post_analyze(file: Annotated[UploadFile, File()]) -> DeterministicReport:
     """Recebe o arquivo, devolve a estrutura parseada junto com os achados."""
-    content = await file.read()
+    # `MAX + 1` e não o arquivo inteiro: basta um byte além do teto para saber
+    # que estourou, e o excedente nunca chega à memória.
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
 
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(
