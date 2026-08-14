@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Lastro: conformidade Docker & Kubernetes",
+  // Só a marca. O que aparece na aba é quase sempre truncado, e o pedaço que
+  // sobrevive precisa ser o nome, não o começo de uma descrição.
+  title: "Lastro",
   description:
     "Envie um Dockerfile, docker-compose ou manifesto do Kubernetes e receba a " +
     "configuração corrigida, pronta para copiar, com a fonte oficial atrás de cada apontamento.",

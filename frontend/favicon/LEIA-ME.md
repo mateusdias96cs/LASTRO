@@ -26,7 +26,7 @@ No `frontend/src/app/layout.tsx`, adicione ao export `metadata`:
 
 ```ts
 export const metadata: Metadata = {
-  title: "Lastro: conformidade Docker & Kubernetes",
+  title: "Lastro",
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },
