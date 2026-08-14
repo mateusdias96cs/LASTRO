@@ -11,13 +11,16 @@ camadas 1 e 4, que são determinísticas. Sem Azure configurado, o campo
 
 from __future__ import annotations
 
+import json
+import queue
+import threading
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from conformidade.pipeline import auditar, diagnostico
+from conformidade.pipeline import Progresso, auditar, diagnostico
 
 router = APIRouter(prefix="/api/v1", tags=["auditoria"])
 
@@ -172,7 +175,10 @@ async def post_auditar(
     influencia nem a detecção nem a verificação.
     """
     texto, nome = await _ler(file)
-    resultado = _executar(texto, nome, contexto)
+    return _resposta(_executar(texto, nome, contexto))
+
+
+def _resposta(resultado) -> RespostaAuditoria:
     return RespostaAuditoria(
         arquivo=resultado.arquivo,
         formato=resultado.formato.value,
@@ -209,3 +215,72 @@ def get_diagnostico() -> dict[str, object]:
     Informa presença, nunca valor — endpoint e client id não aparecem.
     """
     return diagnostico()
+
+
+# --------------------------------------------------------------------------
+# Progresso em tempo real
+# --------------------------------------------------------------------------
+
+
+@router.post("/auditar/stream")
+async def post_auditar_stream(
+    file: Annotated[UploadFile, File()],
+    contexto: Annotated[str, Form()] = "",
+) -> StreamingResponse:
+    """Mesma auditoria, com os eventos das camadas conforme acontecem.
+
+    Existe porque `/auditar` só responde depois de tudo pronto, e a espera é
+    longa: medido, catorze achados levam quase dois minutos, dos quais ~99%
+    são a camada 3. Sem streaming, qualquer indicador de progresso na tela
+    seria coreografia inventada — bonita, e mentindo sobre o que o sistema
+    está fazendo.
+
+    Server-Sent Events e não WebSocket: o fluxo é de mão única e cabe em HTTP
+    comum, sem handshake nem estado. Também não é *polling* com id de job:
+    isso exigiria guardar estado entre requisições, e o Container App escala a
+    zero e roda múltiplas réplicas — o job sumiria com a réplica.
+
+    A resposta final vem no evento `resultado`, com o mesmo corpo de
+    `/auditar`. O endpoint original continua existindo e inalterado, para quem
+    integra por script e não quer saber de progresso.
+    """
+    texto, nome = await _ler(file)
+
+    def eventos():
+        fila: queue.Queue = queue.Queue()
+
+        def emitir(evento: dict) -> None:
+            fila.put(evento)
+
+        def rodar() -> None:
+            try:
+                resultado = auditar(
+                    texto, arquivo=nome, contexto=contexto, progresso=Progresso(emitir)
+                )
+                fila.put({"tipo": "resultado", "dados": _resposta(resultado).model_dump()})
+            except Exception as exc:  # noqa: BLE001 - vira evento de erro, não 500 no meio do stream
+                fila.put({"tipo": "erro", "detalhe": f"{type(exc).__name__}: {exc}"})
+            finally:
+                fila.put(None)
+
+        # O pipeline é síncrono e demorado. Numa thread separada, os eventos
+        # saem enquanto ele roda; no mesmo fluxo, sairiam todos no fim — que é
+        # exatamente o problema que este endpoint existe para resolver.
+        threading.Thread(target=rodar, daemon=True).start()
+
+        while True:
+            evento = fila.get()
+            if evento is None:
+                break
+            yield f"data: {json.dumps(evento, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        eventos(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            # Sem isto, proxy com buffer segura os eventos e entrega tudo no
+            # fim — o stream vira a resposta única que ele deveria substituir.
+            "X-Accel-Buffering": "no",
+        },
+    )

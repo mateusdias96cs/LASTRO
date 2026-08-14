@@ -1,3 +1,134 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+  Sistema visual do Lastro, portado do design.
+
+  Fica em CSS e não em classes utilitárias porque são tokens e animações do
+  produto — cor de marca, tipografia, coreografia da intro. Utilitário é para
+  layout; identidade fica declarada num lugar só.
+*/
+
+:root {
+  --fundo: #06141b;
+  --fundo-2: #0a1f29;
+  --linha: #14303b;
+  --linha-2: #1c3b47;
+  --borda: #22414d;
+  --texto: #e7ecee;
+  --texto-2: #9dacb4;
+  --texto-3: #6e7f89;
+  --texto-4: #4d616a;
+  --acento: #d97b45;
+  --acento-forte: #c25a2c;
+  --serif: "Cormorant Garamond", Georgia, serif;
+  --sans: "Inter Tight", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--acento-forte);
+  color: var(--fundo);
+}
+
+a {
+  color: var(--acento);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--texto);
+}
+
+/* Idioma: o seletor troca a classe na raiz e o CSS decide o que aparece.
+   Sem re-render, sem estado duplicado por nó de texto. */
+[data-lang] {
+  display: none;
+}
+.lang-pt [data-lang="pt"],
+.lang-en [data-lang="en"] {
+  display: revert;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.8s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.8s cubic-bezier(0.2, 0, 0, 1);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes lsDot {
+  0% { transform: translateY(0); opacity: 1; }
+  70% { transform: translateY(9px); opacity: 0.2; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+/* ---------------------------------------------- intro (uma vez por carga) */
+.li-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+#li-hexO { animation: liDraw 1.2s cubic-bezier(0.2, 0, 0, 1) 0.1s forwards; }
+#li-hexI { animation: liDraw 1.2s cubic-bezier(0.2, 0, 0, 1) 0.55s forwards; }
+#li-l { animation: liDraw 1s cubic-bezier(0.2, 0, 0, 1) 1.35s forwards; }
+#li-tick { animation: liDraw 0.45s cubic-bezier(0.2, 0, 0, 1) 2.35s forwards; }
+@keyframes liDraw {
+  to { stroke-dashoffset: 0; }
+}
+#li-circ {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  opacity: 0;
+  animation: liCirc 0.5s cubic-bezier(0.2, 0, 0, 1) 2.15s forwards;
+}
+@keyframes liCirc {
+  to { transform: scale(1); opacity: 1; }
+}
+#li-word {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: liWord 0.6s cubic-bezier(0.2, 0, 0, 1) 2.5s forwards;
+}
+@keyframes liWord {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ------------------------------------------- barra de rolagem discreta */
+.rolagem-fina::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.rolagem-fina::-webkit-scrollbar-thumb {
+  background: var(--borda);
+}

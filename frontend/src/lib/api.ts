@@ -85,6 +85,11 @@ async function detalheDoCorpo(resposta: Response): Promise<string> {
   }
 }
 
+/** Traduz a resposta de erro. Exportada porque o cliente de stream reusa. */
+export async function traduzirResposta(resposta: Response): Promise<ErroDaApi> {
+  return traduzir(resposta, await detalheDoCorpo(resposta));
+}
+
 function traduzir(resposta: Response, detalhe: string): ErroDaApi {
   if (resposta.status === 413) {
     return new ErroDaApi(

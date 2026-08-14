@@ -187,3 +187,59 @@ def test_client_id_da_identidade_gerenciada_chega_ao_provider(monkeypatch):
     provider = AnalisadorAzureOpenAI(endpoint="https://x/", deployment="d")
     get_settings.cache_clear()
     assert provider._client_id == "1234-abcd"
+
+
+# ------------------------------------------------------ progresso real
+
+
+def test_stream_emite_as_quatro_camadas_em_ordem(cliente):
+    """O loader da tela mostra a camada que está rodando. Sem estes eventos,
+    qualquer indicador de progresso seria coreografia inventada."""
+    import json
+
+    etapas = []
+    resultado = None
+    with cliente.stream(
+        "POST", "/api/v1/auditar/stream", files={"file": ("compose.yaml", COMPOSE)}
+    ) as r:
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/event-stream")
+        for linha in r.iter_lines():
+            if not linha.startswith("data: "):
+                continue
+            evento = json.loads(linha[6:])
+            if evento["tipo"] == "etapa" and evento.get("concluida"):
+                etapas.append(evento["etapa"])
+            elif evento["tipo"] == "resultado":
+                resultado = evento["dados"]
+
+    assert etapas == ["deterministico", "recuperacao", "analise", "critico"]
+    assert resultado is not None
+    assert "privileged: false" in resultado["configuracao_corrigida"]
+
+
+def test_stream_reporta_progresso_achado_a_achado(cliente):
+    """A camada 3 é ~99% do tempo. Um indicador que trate as quatro camadas
+    como iguais fica parado no terceiro quarto e parece travado."""
+    import json
+
+    contagens = []
+    with cliente.stream(
+        "POST", "/api/v1/auditar/stream", files={"file": ("compose.yaml", COMPOSE)}
+    ) as r:
+        for linha in r.iter_lines():
+            if linha.startswith("data: "):
+                evento = json.loads(linha[6:])
+                if evento["tipo"] == "analise":
+                    contagens.append((evento["feitos"], evento["total"]))
+
+    assert contagens, "nenhum progresso de análise foi emitido"
+    feitos, total = contagens[-1]
+    assert feitos == total > 0
+
+
+def test_rota_original_continua_intacta(cliente):
+    """O streaming é adicional. Quem integra por script não deve notar."""
+    corpo = _auditar(cliente).json()
+    assert corpo["configuracao_corrigida"]
+    assert corpo["achados"]
