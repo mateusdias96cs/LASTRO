@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
 
 from conformidade.agents.analysis.contracts import AchadoAnalisado, EntradaAnalise
@@ -135,9 +136,20 @@ class AnalisadorAzureOpenAI:
                 "severidade": entrada.severidade_detectada.value,
                 "arquivo": entrada.arquivo,
                 "alvo": entrada.target,
-                "evidencia": entrada.evidencia,
+                # Os campos livres entram JÁ NEUTRALIZADOS, e não crus.
+                #
+                # A chave precisa descrever o prompt que será enviado, não o
+                # que o usuário digitou. Com o valor cru, uma resposta obtida
+                # antes desta defesa — sob o prompt que o ataque forjou —
+                # continuaria sendo servida do cache para a mesma entrada.
+                #
+                # Para texto legítimo `como_dado` é identidade, então a chave
+                # não muda e nenhuma resposta já paga é descartada. Só as
+                # entradas que continham marcador de seção são recalculadas,
+                # que é exatamente o conjunto que precisa ser.
+                "evidencia": como_dado(entrada.evidencia or ""),
                 "mensagem": entrada.mensagem,
-                "contexto": entrada.contexto,
+                "contexto": como_dado(entrada.contexto or ""),
                 "chunks": chunks,
                 "deployment": self._deployment,
                 "prompt": VERSAO_DO_PROMPT,
@@ -308,6 +320,45 @@ def prompt_sistema() -> str:
     )
 
 
+# Marcador de seção no início de uma linha, com recuo opcional.
+_MARCADOR_DE_SECAO = re.compile(r"^([ \t]*)#", re.MULTILINE)
+
+# Espaço de largura zero. Invisível para quem lê, mas suficiente para que a
+# linha deixe de ser um cabeçalho.
+_QUEBRA_DE_MARCADOR = "\u200b"
+
+
+def como_dado(texto: str) -> str:
+    """Neutraliza marcadores de seção em texto vindo do usuário.
+
+    **O ataque que isto fecha.** O prompt é montado por concatenação de seções
+    (`## ACHADO`, `## CONTEXTO...`, `## DOCUMENTO CANÔNICO... (autoridade)`), e
+    a regra 2 manda o modelo tratar o documento canônico como autoridade. Quem
+    consegue escrever `##` no início de uma linha do campo de contexto forja
+    uma segunda seção de autoridade e dita a conclusão. Foi verificado: o
+    prompt passava a ter duas seções com esse nome, a nossa e a do atacante.
+
+    **Por que aqui e não numa regra do prompt.** A regra 6 já manda ignorar
+    contexto que peça para aprovar o achado, e ela funciona para isso: defende
+    contra *pedir*. Este ataque não pede, ele se disfarça de nós — e pedir para
+    o modelo não cair num disfarce é probabilístico. Este projeto inteiro
+    existe porque a saída do modelo é verificada por camadas determinísticas,
+    e não porque o modelo foi bem instruído. A defesa pertence à função que
+    monta a string, onde ou o `#` está no início da linha ou não está.
+
+    **Por que um caractere invisível e não remover o `#`.** Remover mudaria o
+    texto que a pessoa escreveu, e um `#` legítimo (um comentário colado do
+    arquivo dela) sumiria da explicação. O espaço de largura zero mantém tudo
+    legível e só desfaz o valor sintático.
+
+    Note o que NÃO é tocado: `#` no meio da linha, que é o caso comum de
+    comentário citado dentro de uma frase. A transformação é identidade nos 30
+    casos da avaliação da camada 3 — verificado antes de escrever isto, para
+    que a nota não pudesse se mover por causa desta mudança.
+    """
+    return _MARCADOR_DE_SECAO.sub(rf"\1{_QUEBRA_DE_MARCADOR}#", texto)
+
+
 def prompt_usuario(entrada: EntradaAnalise) -> str:
     partes: list[str] = [
         "## ACHADO",
@@ -320,11 +371,16 @@ def prompt_usuario(entrada: EntradaAnalise) -> str:
     if entrada.linha:
         partes.append(f"linha: {entrada.linha}")
     if entrada.evidencia:
-        partes.append(f"evidência: {entrada.evidencia}")
+        # Recorte do arquivo enviado: dado do usuário, mesmo tratamento.
+        partes.append(f"evidência: {como_dado(entrada.evidencia)}")
     if entrada.mensagem:
         partes.append(f"mensagem: {entrada.mensagem}")
 
-    partes += ["", "## CONTEXTO DECLARADO POR QUEM ENVIOU", entrada.contexto or "(nenhum)"]
+    partes += [
+        "",
+        "## CONTEXTO DECLARADO POR QUEM ENVIOU",
+        como_dado(entrada.contexto) if entrada.contexto else "(nenhum)",
+    ]
 
     doc = documento_de(entrada.control_id)
     if doc is not None:
