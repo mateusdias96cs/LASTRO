@@ -1,12 +1,12 @@
 /**
- * Espelho do contrato da API — `RespostaAuditoria` em
+ * Espelho do contrato da API: `RespostaAuditoria` em
  * `src/conformidade/api/auditoria.py`.
  *
  * Escrito à mão e não gerado do OpenAPI de propósito, nesta fase: gerar
  * exigiria rodar a API durante o build do frontend, e o ganho seria pequeno
  * para um contrato de dois modelos. O preço é que os dois arquivos podem
  * divergir, e é por isso que cada campo aqui aponta para o nome exato do lado
- * Python — quem mexer num sabe onde procurar o outro.
+ * Python: quem mexer num sabe onde procurar o outro.
  *
  * Se o contrato crescer, o caminho é gerar a partir de `/openapi.json`, não
  * manter isto maior.
@@ -19,7 +19,7 @@ export interface Citacao {
   url: string;
 }
 
-/** `AchadoNaResposta` — já achatado pela API para consumo de tela. */
+/** `AchadoNaResposta`, já achatado pela API para consumo de tela. */
 export interface Achado {
   control_id: string;
   titulo: string;

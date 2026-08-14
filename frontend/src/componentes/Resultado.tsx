@@ -193,8 +193,8 @@ function Rotulo({ numero, texto }: { numero: string; texto: string }) {
 /**
  * Quanto da análise teve contextualização de IA.
  *
- * Três estados, não dois. A degradação é parcial — o deployment tem limite de
- * requisições por minuto — então "3 de 9" é a informação honesta, e um aviso
+ * Três estados, não dois. A degradação é parcial (o deployment tem limite de
+ * requisições por minuto), então "3 de 9" é a informação honesta, e um aviso
  * binário seria enganoso nas duas direções. Em todos os casos vale a mesma
  * ressalva: **a configuração corrigida não depende disso.**
  */
@@ -230,8 +230,8 @@ function AvisoDeCobertura({ auditoria, lang }: { auditoria: Auditoria; lang: Idi
           "A configuração corrigida é a mesma de qualquer forma",
           "The corrected configuration is the same either way",
         )}
-      </strong>{" "}
-      — {tr(lang, "ela não depende da camada de IA.", "it does not depend on the AI layer.")}
+      </strong>:{" "}
+      {tr(lang, "ela não depende da camada de IA.", "it does not depend on the AI layer.")}
       {auditoria.motivo_sem_ia && (
         <span
           className="mt-1.5 block opacity-70"

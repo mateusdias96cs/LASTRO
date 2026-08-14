@@ -13,7 +13,7 @@ npm run dev                    # http://localhost:3000
 ```
 
 Com a API rodando local em `http://localhost:8000`, o CORS já libera
-`localhost:3000` por padrão — não precisa configurar nada.
+`localhost:3000` por padrão, não precisa configurar nada.
 
 ## Três coisas que não são óbvias
 
@@ -29,7 +29,7 @@ Sem isso a chamada falha, e falha do jeito mais confuso possível: o navegador
 esconde a resposta e o erro chega como falha de rede genérica.
 
 **A URL da API é fixada no build.** Next embute `NEXT_PUBLIC_*` no bundle que
-roda no navegador. Trocar a variável no Container App **não** tem efeito —
+roda no navegador. Trocar a variável no Container App **não** tem efeito:
 precisa reconstruir a imagem com `--build-arg NEXT_PUBLIC_API_URL=...`.
 
 **A primeira análise é lenta.** A API roda com `minReplicas: 0`; depois de

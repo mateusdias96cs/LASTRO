@@ -6,7 +6,7 @@ import { useState } from "react";
  * Bloco com botão de copiar.
  *
  * Usado tanto para a configuração corrigida quanto para a evidência recortada
- * do arquivo enviado — e isso é deliberado: **conteúdo do usuário só aparece
+ * do arquivo enviado, e isso é deliberado: **conteúdo do usuário só aparece
  * dentro de um bloco**, nunca como prosa. Uma linha plantada no arquivo não
  * pode se confundir com o que nós escrevemos.
  */

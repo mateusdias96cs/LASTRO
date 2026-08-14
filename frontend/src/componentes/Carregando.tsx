@@ -7,7 +7,7 @@ import { ETAPAS, ROTULO_ETAPA, type EstadoDoProgresso } from "@/lib/stream";
  *
  * O design original animava os quatro estágios em oito segundos, distribuídos
  * igualmente. A medição diz outra coisa: as camadas 1, 2 e 4 somam
- * milissegundos e a 3 responde por ~99% do tempo — catorze achados levaram
+ * milissegundos e a 3 responde por ~99% do tempo: catorze achados levaram
  * 1m46s, quase tudo nela.
  *
  * Manter a coreografia teria duas consequências ruins. A barra terminaria com
@@ -86,8 +86,8 @@ export function Carregando({
       {progresso.atual === "analise" && (
         <p className="max-w-md text-center text-xs" style={{ color: "var(--texto-4)" }}>
           {lang === "pt"
-            ? "Cada achado é explicado individualmente e conferido contra a fonte oficial. É a etapa mais demorada — analisar o mesmo arquivo de novo é quase instantâneo."
-            : "Each finding is explained individually and checked against the official source. This is the slow step — analyzing the same file again is nearly instant."}
+            ? "Cada achado é explicado individualmente e conferido contra a fonte oficial. É a etapa mais demorada. Analisar o mesmo arquivo de novo é quase instantâneo."
+            : "Each finding is explained individually and checked against the official source. This is the slow step. Analyzing the same file again is nearly instant."}
         </p>
       )}
     </div>

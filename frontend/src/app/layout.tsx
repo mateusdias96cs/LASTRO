@@ -3,10 +3,25 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Lastro — conformidade Docker & Kubernetes",
+  title: "Lastro: conformidade Docker & Kubernetes",
   description:
     "Envie um Dockerfile, docker-compose ou manifesto do Kubernetes e receba a " +
     "configuração corrigida, pronta para copiar, com a fonte oficial atrás de cada apontamento.",
+
+  /*
+    Os arquivos vivem em `public/`, que o Dockerfile já copia para a imagem
+    standalone. O SVG vem primeiro porque escala sozinho em qualquer densidade
+    de tela; os PNG ficam para navegador que ignora favicon vetorial.
+  */
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

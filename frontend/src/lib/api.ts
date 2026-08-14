@@ -5,7 +5,7 @@
  *
  * **Cold start.** O Container App da API roda com `minReplicas: 0` para
  * economizar crédito. Depois de um período ocioso ele desliga, e a primeira
- * requisição precisa acordar o container — o que leva de 10 a 20 segundos. Um
+ * requisição precisa acordar o container, o que leva de 10 a 20 segundos. Um
  * timeout de 5s, que pareceria generoso em qualquer outro contexto, faria a
  * aplicação parecer quebrada justamente na primeira vez que alguém a usa.
  *
@@ -14,7 +14,7 @@
  *
  * **Taxonomia de erro.** O caminho feliz é a parte fácil. O que separa um
  * frontend utilizável de uma tela em branco é cada modo de falha ter uma
- * mensagem própria — em português e sem jargão, porque quem usa isto não sabe
+ * mensagem própria, em português e sem jargão, porque quem usa isto não sabe
  * o que é status HTTP.
  */
 
@@ -51,7 +51,7 @@ export class ErroDaApi extends Error {
   readonly mensagem: string;
   /** O que a pessoa pode fazer a respeito. Vazio quando não há ação. */
   readonly sugestao: string;
-  /** Detalhe técnico, para o rodapé — nunca é a mensagem principal. */
+  /** Detalhe técnico, para o rodapé. Nunca é a mensagem principal. */
   readonly detalhe: string;
 
   constructor(tipo: TipoDeErro, mensagem: string, sugestao = "", detalhe = "") {
@@ -162,7 +162,7 @@ export async function auditar(
       throw new ErroDaApi(
         "timeout",
         "A análise demorou mais do que o esperado e foi interrompida.",
-        "O servidor pode estar iniciando. Tente de novo — a segunda tentativa costuma ser rápida.",
+        "O servidor pode estar iniciando. Tente de novo. A segunda tentativa costuma ser rápida.",
       );
     }
 
