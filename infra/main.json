@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "3855297925686864281"
+      "templateHash": "2701998234519933963"
     }
   },
   "parameters": {
@@ -42,14 +42,21 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "ID completo do recurso Azure OpenAI, para conceder acesso por identidade gerenciada."
+        "description": "Resource id do Azure OpenAI. Vazio pula a atribuição de papel — e a aplicação sobe sem conseguir chamar o modelo."
       }
     },
-    "imageTag": {
+    "apiImageName": {
       "type": "string",
-      "defaultValue": "latest",
+      "defaultValue": "",
       "metadata": {
-        "description": "Tag da imagem a implantar. O pipeline passa o SHA do commit."
+        "description": "Nome completo da imagem da API, incluindo registry e tag."
+      }
+    },
+    "webImageName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Nome completo da imagem do frontend, incluindo registry e tag."
       }
     }
   },
@@ -98,8 +105,11 @@
           "azureOpenAiDeployment": {
             "value": "[parameters('azureOpenAiDeployment')]"
           },
-          "imageTag": {
-            "value": "[parameters('imageTag')]"
+          "apiImageName": {
+            "value": "[parameters('apiImageName')]"
+          },
+          "webImageName": {
+            "value": "[parameters('webImageName')]"
           }
         },
         "template": {
@@ -109,7 +119,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "2571063328387952666"
+              "templateHash": "1532056857720040737"
             }
           },
           "parameters": {
@@ -131,14 +141,19 @@
             "azureOpenAiDeployment": {
               "type": "string"
             },
-            "imageTag": {
+            "apiImageName": {
+              "type": "string"
+            },
+            "webImageName": {
               "type": "string"
             }
           },
           "variables": {
             "prefixo": "[format('conf{0}', parameters('sufixo'))]",
             "papelAcrPull": "7f951dda-4ed3-4680-a7ca-43fe172d538d",
-            "papelSegredosUser": "4633458b-17de-408a-b874-0445c86b69e6"
+            "papelSegredosUser": "4633458b-17de-408a-b874-0445c86b69e6",
+            "imagem": "[parameters('apiImageName')]",
+            "imagemWeb": "[parameters('webImageName')]"
           },
           "resources": [
             {
@@ -289,7 +304,7 @@
                   "containers": [
                     {
                       "name": "api",
-                      "image": "[format('{0}/conformidade/api:{1}', reference(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo'))), '2023-07-01').loginServer, parameters('imageTag'))]",
+                      "image": "[variables('imagem')]",
                       "env": [
                         {
                           "name": "CONFORMIDADE_ENVIRONMENT",
@@ -318,6 +333,14 @@
                         {
                           "name": "AZURE_OPENAI_DEPLOYMENT",
                           "value": "[parameters('azureOpenAiDeployment')]"
+                        },
+                        {
+                          "name": "CONFORMIDADE_CORS_ORIGINS",
+                          "value": "[format('https://{0},http://localhost:3000', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
+                        },
+                        {
+                          "name": "CONFORMIDADE_ANALISE_CACHE_DIR",
+                          "value": "/tmp/conformidade-cache"
                         }
                       ],
                       "resources": {
@@ -375,7 +398,8 @@
                 "[resourceId('Microsoft.KeyVault/vaults', format('kv-{0}', variables('prefixo')))]",
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo')))]",
                 "[resourceId('Microsoft.Insights/components', format('appi-{0}', variables('prefixo')))]",
-                "[resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo')))]"
+                "[resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo')))]",
+                "[resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo')))]"
               ]
             },
             {
@@ -411,7 +435,7 @@
                   "containers": [
                     {
                       "name": "ingest",
-                      "image": "[format('{0}/conformidade/api:{1}', reference(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo'))), '2023-07-01').loginServer, parameters('imageTag'))]",
+                      "image": "[variables('imagem')]",
                       "command": [
                         "/usr/local/bin/entrypoint.sh"
                       ],
@@ -447,6 +471,14 @@
                         {
                           "name": "AZURE_OPENAI_DEPLOYMENT",
                           "value": "[parameters('azureOpenAiDeployment')]"
+                        },
+                        {
+                          "name": "CONFORMIDADE_CORS_ORIGINS",
+                          "value": "[format('https://{0},http://localhost:3000', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
+                        },
+                        {
+                          "name": "CONFORMIDADE_ANALISE_CACHE_DIR",
+                          "value": "/tmp/conformidade-cache"
                         }
                       ],
                       "resources": {
@@ -463,6 +495,70 @@
                 "[resourceId('Microsoft.KeyVault/vaults', format('kv-{0}', variables('prefixo')))]",
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo')))]",
                 "[resourceId('Microsoft.Insights/components', format('appi-{0}', variables('prefixo')))]",
+                "[resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo')))]",
+                "[resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[format('ca-web-{0}', variables('prefixo'))]",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('azd-service-name', 'web'))]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo'))))]": {}
+                }
+              },
+              "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', variables('prefixo')))]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 3000,
+                    "transport": "auto",
+                    "allowInsecure": false
+                  },
+                  "registries": [
+                    {
+                      "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo'))), '2023-07-01').loginServer]",
+                      "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo')))]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "web",
+                      "image": "[variables('imagemWeb')]",
+                      "resources": {
+                        "cpu": "[json('0.25')]",
+                        "memory": "0.5Gi"
+                      }
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 0,
+                    "maxReplicas": 3,
+                    "rules": [
+                      {
+                        "name": "http",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "50"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "dependsOn": [
+                "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo'))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo'))), variables('papelAcrPull')))]",
+                "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}', variables('prefixo')))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('id-{0}', variables('prefixo')))]",
                 "[resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}', variables('prefixo')))]"
               ]
             }
@@ -491,6 +587,10 @@
             "apiUri": {
               "type": "string",
               "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', format('ca-api-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
+            },
+            "webUri": {
+              "type": "string",
+              "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', format('ca-web-{0}', variables('prefixo'))), '2024-03-01').configuration.ingress.fqdn)]"
             }
           }
         }
@@ -587,6 +687,14 @@
     "AZURE_CLIENT_ID": {
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-conformidade-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'recursos'), '2025-04-01').outputs.identidadeClientId.value]"
+    },
+    "PAPEL_OPENAI_ATRIBUIDO": {
+      "type": "bool",
+      "value": "[not(empty(parameters('azureOpenAiResourceId')))]"
+    },
+    "SERVICE_WEB_URI": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-conformidade-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'recursos'), '2025-04-01').outputs.webUri.value]"
     }
   }
 }

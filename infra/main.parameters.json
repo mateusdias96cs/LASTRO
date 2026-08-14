@@ -7,6 +7,7 @@
     "azureOpenAiEndpoint": { "value": "${AZURE_OPENAI_ENDPOINT}" },
     "azureOpenAiDeployment": { "value": "${AZURE_OPENAI_DEPLOYMENT}" },
     "azureOpenAiResourceId": { "value": "${AZURE_OPENAI_RESOURCE_ID}" },
-    "imageTag": { "value": "${IMAGE_TAG=latest}" }
+    "apiImageName": { "value": "${SERVICE_API_IMAGE_NAME}" },
+    "webImageName": { "value": "${SERVICE_WEB_IMAGE_NAME}" }
   }
 }

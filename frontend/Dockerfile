@@ -3,7 +3,7 @@
 #
 # A URL da API entra em BUILD, não em runtime. Next embute `NEXT_PUBLIC_*` no
 # bundle que vai para o navegador, então mudá-la depois exige reconstruir a
-# imagem. Isso é limitação do Next, não escolha nossa — vale saber antes de
+# imagem. Isso é limitação do Next, não escolha nossa. Vale saber antes de
 # tentar trocar a URL por variável do Container App e não entender por que não
 # surtiu efeito.
 FROM node:22.13.1-bookworm-slim AS deps
@@ -24,7 +24,7 @@ RUN npm run build
 FROM node:22.13.1-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
-# UID numérico, não nome: é o que o PodSecurityStandard `restricted` valida —
+# UID numérico, não nome: é o que o PodSecurityStandard `restricted` valida:
 # a mesma regra que este sistema audita nos arquivos dos outros.
 RUN useradd --system --uid 10001 --no-create-home web
 COPY --from=build --chown=10001:10001 /app/.next/standalone ./

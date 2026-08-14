@@ -18,7 +18,7 @@ type Aba = "colar" | "arquivo";
 
 /**
  * Entrada: colar ou subir arquivo. Os dois caminhos viram o mesmo `File` e
- * seguem pelo mesmo POST — dois caminhos de request para o mesmo efeito seriam
+ * seguem pelo mesmo POST: dois caminhos de request para o mesmo efeito seriam
  * dois lugares para corrigir quando algo mudar.
  */
 export function Envio({
@@ -171,8 +171,8 @@ export function Envio({
           />
           <p className="mt-[7px] text-[11px] leading-relaxed" style={{ color: "var(--texto-4)" }}>
             {t(
-              "Descrever a carga permite reconhecer exceções legítimas — um DaemonSet de rede precisa de acessos que uma API comum não precisa.",
-              "Describing the workload lets it recognize legitimate exceptions — a network DaemonSet needs access a plain API does not.",
+              "Descrever a carga permite reconhecer exceções legítimas: um DaemonSet de rede precisa de acessos que uma API comum não precisa.",
+              "Describing the workload lets it recognize legitimate exceptions: a network DaemonSet needs access a plain API does not.",
             )}
           </p>
         </div>

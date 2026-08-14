@@ -29,7 +29,7 @@ export function Intro({ aoTerminar }: { aoTerminar: () => void }) {
     }
 
     // Voa até a marca do menu: mede as duas caixas e interpola, em vez de
-    // fixar coordenadas — o menu muda de posição com a largura da tela.
+    // fixar coordenadas: o menu muda de posição com a largura da tela.
     const voo = setTimeout(() => {
       const alvo = document.getElementById("ls-navmark");
       const origem = document.getElementById("ls-intro-mark");

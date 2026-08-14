@@ -6,7 +6,7 @@
   Sistema visual do Lastro, portado do design.
 
   Fica em CSS e não em classes utilitárias porque são tokens e animações do
-  produto — cor de marca, tipografia, coreografia da intro. Utilitário é para
+  produto: cor de marca, tipografia, coreografia da intro. Utilitário é para
   layout; identidade fica declarada num lugar só.
 */
 

@@ -15,6 +15,15 @@ services:
     docker:
       path: ./Dockerfile
       context: .
+  web:
+    project: ./frontend
+    language: docker
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      buildArgs:
+        - NEXT_PUBLIC_API_URL=${SERVICE_API_URI}
 
 hooks:
   # Impede subir com o índice defasado do corpus: o container responderia com

@@ -3,7 +3,7 @@
  *
  * `/auditar` só responde quando tudo termina, e a espera é longa: medido,
  * catorze achados levam quase dois minutos. Um indicador de progresso sobre
- * esse endpoint só poderia ser coreografia inventada — bonita, e mentindo
+ * esse endpoint só poderia ser coreografia inventada: bonita, e mentindo
  * sobre o que o sistema faz. Este consome `/auditar/stream`, onde cada camada
  * anuncia início e fim conforme acontece.
  *
@@ -13,7 +13,7 @@
  * O desequilíbrio entre as camadas é a razão de o evento de análise reportar
  * achado a achado. As camadas 1, 2 e 4 somam milissegundos; a 3 é ~99% do
  * tempo. Um indicador que trate as quatro como iguais fica parado no terceiro
- * quarto e parece travado — que é justamente a impressão a evitar.
+ * quarto e parece travado, que é justamente a impressão a evitar.
  */
 
 import { ErroDaApi, TIMEOUT_MS } from "@/lib/api";
@@ -122,7 +122,7 @@ export async function auditarComProgresso(
       restante += decodificador.decode(value, { stream: true });
 
       // Um evento SSE termina em linha em branco. Fatiar por `\n` sozinho
-      // partiria eventos grandes — o `resultado` carrega o relatório inteiro.
+      // partiria eventos grandes: o `resultado` carrega o relatório inteiro.
       const blocos = restante.split("\n\n");
       restante = blocos.pop() ?? "";
 
@@ -152,7 +152,7 @@ export async function auditarComProgresso(
       throw new ErroDaApi(
         "servidor",
         "A conexão terminou antes de a análise concluir.",
-        "Tente de novo — a segunda tentativa costuma ser rápida por causa do cache.",
+        "Tente de novo. A segunda tentativa costuma ser rápida por causa do cache.",
       );
     }
     return resultado;
@@ -163,7 +163,7 @@ export async function auditarComProgresso(
       throw new ErroDaApi(
         "timeout",
         "A análise passou do tempo limite e foi interrompida.",
-        "O servidor pode estar iniciando. Tente de novo — a segunda vez costuma ser rápida.",
+        "O servidor pode estar iniciando. Tente de novo. A segunda vez costuma ser rápida.",
       );
     }
     throw new ErroDaApi(

@@ -17,8 +17,8 @@ import { PROGRESSO_INICIAL, auditarComProgresso, type EstadoDoProgresso } from "
  * Máquina de estados da tela.
  *
  * Quatro estados explícitos em vez de booleanos soltos: com
- * `carregando`/`erro`/`dados` é possível representar o impossível — carregando
- * e com erro ao mesmo tempo — e a tela acaba mostrando duas coisas ou nenhuma.
+ * `carregando`/`erro`/`dados` é possível representar o impossível: carregando
+ * e com erro ao mesmo tempo, e a tela acaba mostrando duas coisas ou nenhuma.
  */
 type Estado =
   | { nome: "inicial" }
@@ -507,7 +507,7 @@ export default function Pagina() {
   );
 }
 
-/** A régua de calado do hero — a metáfora que dá nome ao produto. */
+/** A régua de calado do hero, a metáfora que dá nome ao produto. */
 function Calado() {
   return (
     <div

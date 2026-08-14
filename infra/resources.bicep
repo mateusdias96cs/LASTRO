@@ -14,7 +14,8 @@ param sufixo string
 param tags object
 param azureOpenAiEndpoint string
 param azureOpenAiDeployment string
-param imageTag string
+param apiImageName string
+param webImageName string
 
 var prefixo = 'conf${sufixo}'
 
@@ -129,7 +130,7 @@ resource ambiente 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
-var imagem = '${registry.properties.loginServer}/conformidade/api:${imageTag}'
+var imagem = apiImageName
 
 var variaveisComuns = [
   { name: 'CONFORMIDADE_ENVIRONMENT', value: environmentName == 'prod' ? 'prod' : 'dev' }
@@ -139,6 +140,18 @@ var variaveisComuns = [
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }
   { name: 'AZURE_OPENAI_ENDPOINT', value: azureOpenAiEndpoint }
   { name: 'AZURE_OPENAI_DEPLOYMENT', value: azureOpenAiDeployment }
+  { name: 'CONFORMIDADE_CORS_ORIGINS', value: 'https://${web.properties.configuration.ingress.fqdn},http://localhost:3000' }
+  // O cache da camada 3 precisa de um caminho gravável pelo usuário 10001.
+  //
+  // `/app` pertence a root: o `WORKDIR` do Dockerfile o cria assim, e os
+  // `COPY --chown` só mudam o dono dos caminhos copiados. O padrão relativo
+  // do código resolvia para `/app/.cache-analise` e estourava com
+  // `PermissionError` em toda auditoria — gastando a cota do modelo para
+  // descartar a resposta logo em seguida.
+  //
+  // `/tmp` some a cada reinício, e com `minReplicas: 0` isso é frequente. É
+  // aceitável: o cache é otimização, e o código já trata a ausência dele.
+  { name: 'CONFORMIDADE_ANALISE_CACHE_DIR', value: '/tmp/conformidade-cache' }
 ]
 
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
@@ -258,3 +271,51 @@ output registryLoginServer string = registry.properties.loginServer
 output registryName string = registry.name
 output keyVaultName string = cofre.name
 output apiUri string = 'https://${api.properties.configuration.ingress.fqdn}'
+
+// ─────────────────────────────────────────────── frontend
+
+var imagemWeb = webImageName
+
+resource web 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-web-${prefixo}'
+  location: location
+  tags: union(tags, { 'azd-service-name': 'web' })
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${identidade.id}': {} }
+  }
+  properties: {
+    managedEnvironmentId: ambiente.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 3000
+        transport: 'auto'
+        allowInsecure: false
+      }
+      registries: [
+        { server: registry.properties.loginServer, identity: identidade.id }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'web'
+          image: imagemWeb
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 3
+        rules: [
+          { name: 'http', http: { metadata: { concurrentRequests: '50' } } }
+        ]
+      }
+    }
+  }
+  dependsOn: [acrPull]
+}
+
+output webUri string = 'https://${web.properties.configuration.ingress.fqdn}'
