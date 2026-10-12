@@ -78,7 +78,7 @@ jobs:
 
       - name: Publicar resultado dos testes
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: resultado-dos-testes
           path: junit.xml
@@ -178,7 +178,7 @@ jobs:
       # Corpus e índice são conteúdo auditável — entram por PR, não por push
       # automático de robô.
       - name: Publicar corpus e índice regerados
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: corpus-reindexado
           path: corpus/
